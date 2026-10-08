@@ -1556,17 +1556,28 @@ function syncFsBtn(){
   fsBtn.textContent = on?'⛶':'⛶'; // 同一個圖案，用 aria-pressed 的綠底表示狀態
   fsBtn.title = on?'退出全螢幕（按 F）':'全螢幕（按 F）';
 }
+// iOS Safari 根本不支援 element 層級的全螢幕 API，按鈕乾脆藏起來不要騙玩家
+var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+var isStandalone=window.navigator.standalone===true
+  || (window.matchMedia && matchMedia('(display-mode:standalone)').matches);
+if(isIOS || isStandalone) fsBtn.style.display='none';
+
 function toggleFullscreen(){
   var el=document.documentElement;
   if(fsElement()){
     (document.exitFullscreen||document.webkitExitFullscreen).call(document);
+    return;
+  }
+  if(isIOS){
+    // iOS 唯一的「全螢幕」方式是加入主畫面以 standalone 開啟
+    toast(isStandalone ? '已經是全螢幕了' : 'iPhone 請用 Safari 分享 → 加入主畫面');
+    return;
+  }
+  var req=el.requestFullscreen||el.webkitRequestFullscreen;
+  if(req){
+    try{ req.call(el); }catch(e){ toast('這個瀏覽器不支援全螢幕'); }
   }else{
-    var req=el.requestFullscreen||el.webkitRequestFullscreen;
-    if(req){
-      try{ req.call(el); }catch(e){ toast('這個瀏覽器不支援全螢幕'); }
-    }else{
-      toast('這個瀏覽器不支援全螢幕（iOS Safari 請改用「加入主畫面」）');
-    }
+    toast('這個瀏覽器不支援全螢幕');
   }
 }
 fsBtn.addEventListener('click',function(e){e.preventDefault();toggleFullscreen();});

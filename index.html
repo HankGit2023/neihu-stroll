@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="description" content="在台北市內湖區自由走動的散步遊戲：走訪 17 個真實地景、收集 30 件在地圖鑑，順便揍馬哥。">
+<!-- iOS 加入主畫面後以 standalone 開啟，瀏覽器網址列不會出現 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="內湖漫遊">
 <meta property="og:title" content="內湖漫遊">
 <meta property="og:description" content="一款沒有終點的散步遊戲。大湖公園的錦帶橋、白石湖吊橋、碧山巖、內科的玻璃帷幕、737巷的油煙、基隆河的左岸。">
 <meta property="og:type" content="website">
@@ -59,7 +64,16 @@ body{
 button{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--focus); outline-offset:2px}
 
-.shell{max-width:1200px;margin:0 auto;padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.shell{max-width:1200px;margin:0 auto;padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px;
+  /* 加入主畫面以 standalone 開啟時，避開瀏海/底部 home indicator */
+  padding-top:calc(16px + env(safe-area-inset-top));
+  padding-bottom:calc(28px + env(safe-area-inset-bottom));
+  padding-left:calc(16px + env(safe-area-inset-left));
+  padding-right:calc(16px + env(safe-area-inset-right))}
+/* standalone 模式已經是全螢幕，不用再放全螢幕鈕 */
+@media (display-mode:standalone),(display-mode:fullscreen){
+  .fs-btn{display:none}
+}
 
 /* ---- 捷運站牌式的標頭 ---- */
 .sign{background:var(--brown);color:var(--brownT);border-radius:3px;display:flex;align-items:center;gap:14px;padding:10px 16px;flex-wrap:wrap}

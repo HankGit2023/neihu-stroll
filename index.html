@@ -70,10 +70,19 @@ button{font:inherit;color:inherit}
   padding-bottom:calc(28px + env(safe-area-inset-bottom));
   padding-left:calc(16px + env(safe-area-inset-left));
   padding-right:calc(16px + env(safe-area-inset-right))}
-/* standalone 模式已經是全螢幕，不用再放全螢幕鈕 */
-@media (display-mode:standalone),(display-mode:fullscreen){
-  .fs-btn{display:none}
+/* ---- Focus 模式：按全螢幕鈕後只留遊戲 canvas + 浮動小地圖 ---- */
+body.focus-mode{background:#000}
+body.focus-mode .sign,
+body.focus-mode .rule,
+body.focus-mode .panel,
+body.focus-mode .foot{display:none}
+body.focus-mode .shell{
+  padding:0; gap:0; max-width:none;
+  min-height:100vh; min-height:100dvh;
+  justify-content:flex-end;  /* viewport 貼底，拇指好搆 */
 }
+body.focus-mode .stage{grid-template-columns:1fr; gap:0}
+body.focus-mode .viewport{border:0; border-radius:0}
 
 /* ---- 捷運站牌式的標頭 ---- */
 .sign{background:var(--brown);color:var(--brownT);border-radius:3px;display:flex;align-items:center;gap:14px;padding:10px 16px;flex-wrap:wrap}
@@ -1550,39 +1559,44 @@ var fsBtn=document.getElementById('fs-btn');
 function fsElement(){
   return document.fullscreenElement || document.webkitFullscreenElement || null;
 }
-function syncFsBtn(){
-  var on=!!fsElement();
-  fsBtn.setAttribute('aria-pressed', on?'true':'false');
-  fsBtn.textContent = on?'⛶':'⛶'; // 同一個圖案，用 aria-pressed 的綠底表示狀態
-  fsBtn.title = on?'退出全螢幕（按 F）':'全螢幕（按 F）';
-}
-// iOS Safari 根本不支援 element 層級的全螢幕 API，按鈕乾脆藏起來不要騙玩家
-var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-var isStandalone=window.navigator.standalone===true
-  || (window.matchMedia && matchMedia('(display-mode:standalone)').matches);
-if(isIOS || isStandalone) fsBtn.style.display='none';
-
+// Focus 模式：藏掉 header、tab、現場卡、日誌，只留 canvas + 浮動小地圖。
+// 同時試著叫瀏覽器進全螢幕（桌機和 Android Chrome 會成功；iOS 失敗沒差）。
 function toggleFullscreen(){
-  var el=document.documentElement;
-  if(fsElement()){
-    (document.exitFullscreen||document.webkitExitFullscreen).call(document);
-    return;
-  }
-  if(isIOS){
-    // iOS 唯一的「全螢幕」方式是加入主畫面以 standalone 開啟
-    toast(isStandalone ? '已經是全螢幕了' : 'iPhone 請用 Safari 分享 → 加入主畫面');
-    return;
-  }
-  var req=el.requestFullscreen||el.webkitRequestFullscreen;
-  if(req){
-    try{ req.call(el); }catch(e){ toast('這個瀏覽器不支援全螢幕'); }
+  var inFocus = document.body.classList.contains('focus-mode');
+  if(inFocus){
+    document.body.classList.remove('focus-mode');
+    if(fsElement()){
+      (document.exitFullscreen||document.webkitExitFullscreen).call(document);
+    }
   }else{
-    toast('這個瀏覽器不支援全螢幕');
+    document.body.classList.add('focus-mode');
+    var el=document.documentElement;
+    var req=el.requestFullscreen||el.webkitRequestFullscreen;
+    if(req){
+      try{ req.call(el); }catch(e){ /* 失敗沒差，CSS focus mode 已經生效 */ }
+    }
   }
+  syncFsBtn();
+}
+function syncFsBtn(){
+  var on = document.body.classList.contains('focus-mode') || !!fsElement();
+  fsBtn.setAttribute('aria-pressed', on?'true':'false');
+  fsBtn.title = on?'退出全螢幕（按 F / ESC）':'只顯示遊戲（按 F）';
 }
 fsBtn.addEventListener('click',function(e){e.preventDefault();toggleFullscreen();});
-document.addEventListener('fullscreenchange',syncFsBtn);
-document.addEventListener('webkitfullscreenchange',syncFsBtn);
+// 從外部（例如 ESC 鍵）退出瀏覽器全螢幕時，也退出 focus 模式
+document.addEventListener('fullscreenchange',function(){
+  if(!fsElement() && document.body.classList.contains('focus-mode')){
+    document.body.classList.remove('focus-mode');
+  }
+  syncFsBtn();
+});
+document.addEventListener('webkitfullscreenchange',function(){
+  if(!fsElement() && document.body.classList.contains('focus-mode')){
+    document.body.classList.remove('focus-mode');
+  }
+  syncFsBtn();
+});
 syncFsBtn();
 
 function switchTab(name){

@@ -100,16 +100,18 @@ button{font:inherit;color:inherit}
 .abtn.off{opacity:.42;color:#c6ccc4;font-weight:500;letter-spacing:.02em}
 .abtn.ready{background:rgba(46,125,107,.78);border-color:rgba(243,247,241,.55)}
 
-/* ---- 聲音開關 ---- */
-.audio-btn{position:absolute;right:10px;top:10px;z-index:5;
+/* ---- 右上角 HUD 鈕（聲音 / 全螢幕） ---- */
+.hud-btn{position:absolute;top:10px;z-index:5;
   background:rgba(22,28,24,.6);color:#f3f7f1;border:1px solid rgba(243,247,241,.3);
   width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
   cursor:pointer;font-size:16px;line-height:1;padding:0;
   -webkit-user-select:none;user-select:none;
   transition:background .14s ease,border-color .14s ease,transform .14s ease}
-.audio-btn:hover{background:rgba(22,28,24,.82)}
-.audio-btn:active{transform:scale(.94)}
-.audio-btn[aria-pressed="true"]{background:rgba(46,125,107,.78);border-color:rgba(243,247,241,.55)}
+.hud-btn:hover{background:rgba(22,28,24,.82)}
+.hud-btn:active{transform:scale(.94)}
+.hud-btn[aria-pressed="true"]{background:rgba(46,125,107,.78);border-color:rgba(243,247,241,.55)}
+.audio-btn{right:10px}
+.fs-btn{right:56px}
 
 /* ---- 類比搖桿 ---- */
 #stickzone{position:absolute;left:0;top:54px;width:48%;bottom:0;z-index:4;touch-action:none;pointer-events:auto}
@@ -219,7 +221,8 @@ button{font:inherit;color:inherit}
   <main class="stage">
     <section class="viewport">
       <canvas id="game" width="960" height="600"></canvas>
-      <button class="audio-btn" id="audio-btn" type="button" aria-pressed="false" aria-label="聲音開關" title="聲音關（按 M 開啟）">🔇</button>
+      <button class="hud-btn fs-btn" id="fs-btn" type="button" aria-pressed="false" aria-label="全螢幕切換" title="全螢幕（按 F 切換）">⛶</button>
+      <button class="hud-btn audio-btn" id="audio-btn" type="button" aria-pressed="false" aria-label="聲音開關" title="聲音關（按 M 開啟）">🔇</button>
       <div class="hint" id="hint"></div>
       <div class="toast" id="toast"></div>
       <div id="stickzone"></div>
@@ -265,6 +268,7 @@ button{font:inherit;color:inherit}
           <li><kbd>推到底</kbd><span>維持滿推半秒就會加速衝刺</span></li>
           <li><kbd>Shift</kbd><span>立刻全速，不用等</span></li>
           <li><kbd>1 2 3</kbd><span>切換右邊的分頁</span></li>
+          <li><kbd>M / F</kbd><span>聲音開關 / 全螢幕切換</span></li>
         </ul>
         <p class="note">地圖上某處有個穿水藍色風衣、下巴有點厚的傢伙，叫馬哥，頭上永遠掛著一句「那個前端真的很屌..」。他會自己換地方，小地圖上的橘點就是他。走到他旁邊按 <b>E</b> 可以揍下去。</p>
         <p class="note">內科和 737 巷一帶有四個掛著名字的同事——羅素、Kevin、Hank、Vivian。走過去互動，他會問「要一起抽煙嗎？」，再按 <b>E</b>一次就等於回他「走」，然後他會排成一列跟著你。停下來不動，他們會自己點起菸。再互動一次就讓他回去上班。</p>
@@ -1372,6 +1376,7 @@ window.addEventListener('keydown',function(e){
   if(k==='e'||k==='enter'||k===' ')interact();
   if(k==='1')switchTab('now'); if(k==='2')switchTab('dex'); if(k==='3')switchTab('help');
   if(k==='m'){ e.preventDefault(); toggleAudio(); }
+  if(k==='f'){ e.preventDefault(); toggleFullscreen(); }
 });
 window.addEventListener('keyup',function(e){keys[e.key.toLowerCase()]=0;});
 window.addEventListener('blur',function(){keys={};joyReset();});
@@ -1523,6 +1528,37 @@ function toggleAudio(){ syncAudioBtn(SND.toggle()); }
 audioBtn.addEventListener('click',function(e){e.preventDefault();toggleAudio();});
 // 預設關閉：reload 後都是靜音，不寫入 localStorage，避免在辦公室被嚇到
 syncAudioBtn(false);
+
+/* ============ 全螢幕 UI ============
+   全螢幕整個 document.documentElement，瀏覽器網址列會收起，
+   浮動小地圖和 panel 都還在；iOS Safari 不支援就只能加到主畫面達到類似效果。 */
+var fsBtn=document.getElementById('fs-btn');
+function fsElement(){
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+function syncFsBtn(){
+  var on=!!fsElement();
+  fsBtn.setAttribute('aria-pressed', on?'true':'false');
+  fsBtn.textContent = on?'⛶':'⛶'; // 同一個圖案，用 aria-pressed 的綠底表示狀態
+  fsBtn.title = on?'退出全螢幕（按 F）':'全螢幕（按 F）';
+}
+function toggleFullscreen(){
+  var el=document.documentElement;
+  if(fsElement()){
+    (document.exitFullscreen||document.webkitExitFullscreen).call(document);
+  }else{
+    var req=el.requestFullscreen||el.webkitRequestFullscreen;
+    if(req){
+      try{ req.call(el); }catch(e){ toast('這個瀏覽器不支援全螢幕'); }
+    }else{
+      toast('這個瀏覽器不支援全螢幕（iOS Safari 請改用「加入主畫面」）');
+    }
+  }
+}
+fsBtn.addEventListener('click',function(e){e.preventDefault();toggleFullscreen();});
+document.addEventListener('fullscreenchange',syncFsBtn);
+document.addEventListener('webkitfullscreenchange',syncFsBtn);
+syncFsBtn();
 
 function switchTab(name){
   state.tab=name;

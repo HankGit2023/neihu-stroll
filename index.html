@@ -91,6 +91,17 @@ button{font:inherit;color:inherit}
   -webkit-user-select:none;user-select:none;touch-action:none;display:grid;place-items:center;
   width:68px;height:68px;border-radius:50%;pointer-events:auto;font-size:15px;font-weight:700;letter-spacing:.08em}
 
+/* ---- 聲音開關 ---- */
+.audio-btn{position:absolute;right:10px;top:10px;z-index:5;
+  background:rgba(22,28,24,.6);color:#f3f7f1;border:1px solid rgba(243,247,241,.3);
+  width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
+  cursor:pointer;font-size:16px;line-height:1;padding:0;
+  -webkit-user-select:none;user-select:none;
+  transition:background .14s ease,border-color .14s ease,transform .14s ease}
+.audio-btn:hover{background:rgba(22,28,24,.82)}
+.audio-btn:active{transform:scale(.94)}
+.audio-btn[aria-pressed="true"]{background:rgba(46,125,107,.78);border-color:rgba(243,247,241,.55)}
+
 /* ---- 類比搖桿 ---- */
 #stickzone{position:absolute;left:0;top:54px;width:48%;bottom:0;z-index:4;touch-action:none;pointer-events:auto}
 #stick{position:absolute;left:112px;bottom:112px;width:0;height:0;z-index:4;pointer-events:none}
@@ -183,6 +194,7 @@ button{font:inherit;color:inherit}
   <main class="stage">
     <section class="viewport">
       <canvas id="game" width="960" height="600"></canvas>
+      <button class="audio-btn" id="audio-btn" type="button" aria-pressed="false" aria-label="聲音開關" title="聲音關（按 M 開啟）">🔇</button>
       <div class="hint" id="hint"></div>
       <div class="toast" id="toast"></div>
       <div id="stickzone"></div>
@@ -251,6 +263,110 @@ button{font:inherit;color:inherit}
 <script>
 (function(){
 'use strict';
+
+/* ============ 音訊：BGM + 揍人音效 ============
+   預設關閉（辦公室友善）。按鈕或 M 鍵開關。
+   全程 Web Audio 合成，不需要任何音檔。 */
+var SND=(function(){
+  var ac=null, master=null, bgmGain=null, bgmTimer=0, bgmStep=0, enabled=false;
+  // C 大調琶音，輕快感
+  var SCALE=[523.25,659.25,783.99,659.25,880.00,783.99,659.25,523.25]; // C5 E5 G5 E5 A5 G5 E5 C5
+  var STEP_MS=180; // ~ 83 BPM 的八分音
+  function ensureCtx(){
+    if(ac)return ac;
+    try{
+      var AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC)return null;
+      ac=new AC();
+      master=ac.createGain(); master.gain.value=0.9; master.connect(ac.destination);
+      bgmGain=ac.createGain(); bgmGain.gain.value=0; bgmGain.connect(master);
+    }catch(e){ac=null;}
+    return ac;
+  }
+  function playNote(freq,dur,when,gain){
+    if(!ac)return;
+    var o=ac.createOscillator(), g=ac.createGain();
+    o.type='triangle'; o.frequency.value=freq;
+    var t0=when||ac.currentTime, d=dur||0.22;
+    g.gain.setValueAtTime(0,t0);
+    g.gain.linearRampToValueAtTime(gain||0.05,t0+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+d);
+    o.connect(g); g.connect(bgmGain);
+    o.start(t0); o.stop(t0+d+0.02);
+  }
+  function tickBGM(){
+    if(!enabled||!ac)return;
+    var now=ac.currentTime;
+    // 主旋律
+    playNote(SCALE[bgmStep%SCALE.length],0.22,now,0.055);
+    // 低八度 bass（每兩步一次）
+    if(bgmStep%2===0){
+      playNote(SCALE[bgmStep%SCALE.length]*0.5,0.42,now,0.035);
+    }
+    bgmStep++;
+  }
+  function startBGM(){
+    if(!enabled||!ac||bgmTimer)return;
+    bgmGain.gain.cancelScheduledValues(ac.currentTime);
+    bgmGain.gain.setValueAtTime(bgmGain.gain.value,ac.currentTime);
+    bgmGain.gain.linearRampToValueAtTime(0.9,ac.currentTime+0.6); // 柔和淡入
+    bgmTimer=setInterval(tickBGM,STEP_MS);
+  }
+  function stopBGM(fade){
+    if(!bgmTimer)return;
+    clearInterval(bgmTimer); bgmTimer=0;
+    if(ac&&bgmGain){
+      var t=ac.currentTime, f=fade===false?0.05:0.25;
+      bgmGain.gain.cancelScheduledValues(t);
+      bgmGain.gain.setValueAtTime(bgmGain.gain.value,t);
+      bgmGain.gain.linearRampToValueAtTime(0.0001,t+f);
+    }
+  }
+  // 揍人音效：短促 impact + 低頻 thump
+  function punch(delay){
+    if(!enabled||!ac)return;
+    var t0=ac.currentTime+(delay||0);
+    // 1) noise burst（打擊的「啪」）
+    var sr=ac.sampleRate, len=Math.floor(sr*0.08);
+    var buf=ac.createBuffer(1,len,sr), d=buf.getChannelData(0);
+    for(var i=0;i<len;i++){ d[i]=(Math.random()*2-1)*(1-i/len); }
+    var n=ac.createBufferSource(); n.buffer=buf;
+    var nf=ac.createBiquadFilter(); nf.type='bandpass'; nf.frequency.value=1800; nf.Q.value=0.8;
+    var ng=ac.createGain(); ng.gain.setValueAtTime(0.28,t0); ng.gain.exponentialRampToValueAtTime(0.001,t0+0.09);
+    n.connect(nf); nf.connect(ng); ng.connect(master);
+    n.start(t0); n.stop(t0+0.1);
+    // 2) 低頻下滑（拳頭的 thump）
+    var o=ac.createOscillator(), g=ac.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(180,t0); o.frequency.exponentialRampToValueAtTime(55,t0+0.13);
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(0.22,t0+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+0.18);
+    o.connect(g); g.connect(master);
+    o.start(t0); o.stop(t0+0.2);
+  }
+  function setEnabled(on){
+    enabled=!!on;
+    if(enabled){
+      ensureCtx();
+      if(ac&&ac.state==='suspended'){try{ac.resume();}catch(e){}}
+      startBGM();
+    }else{
+      stopBGM();
+    }
+  }
+  // 分頁切走就暫停 BGM，回來再接上
+  document.addEventListener('visibilitychange',function(){
+    if(!enabled||!ac)return;
+    if(document.hidden){ stopBGM(false); }
+    else{ startBGM(); }
+  });
+  return {
+    isOn:function(){return enabled;},
+    toggle:function(){setEnabled(!enabled);return enabled;},
+    setEnabled:setEnabled,
+    punch:punch
+  };
+})();
 
 /* ============ 常數 ============ */
 var TS=28, MW=100, MH=76, WW=MW*TS, WH=MH*TS;
@@ -1124,11 +1240,13 @@ function interact(){
     state.hits=(state.hits||0)+1+mob.length;
     M.mood=1; M.moodT=6.5+mob.length*0.8; M.shake=0.6; M.hitFx=0.3;
     punchAt(ptx2(),pty2(),'#f1e3cf','#2e7d6b',0);
+    SND.punch(0.16); // 和 punchAt 的 dur*0.5 命中點對齊
     for(var mi=0;mi<mob.length;mi++){
       var mf=mob[mi];
       mf.dir=Math.abs(M.x-mf.x)>Math.abs(M.y-mf.y)?(M.x>mf.x?'right':'left'):(M.y>mf.y?'down':'up');
       say(mf,['欸！','這拳我忍很久了。','提測個頭啦。','上啊。'][mi%4],2.6);
       punchAt(mf.x,mf.y,mf.c,mf.c2,0.1*(mi+1));
+      SND.punch(0.16+0.1*(mi+1));
     }
     var ang=Math.atan2(M.y-pty2(), M.x-ptx2());
     var kick=1.2+mob.length*0.35;
@@ -1228,6 +1346,7 @@ window.addEventListener('keydown',function(e){
   keys[k]=1;
   if(k==='e'||k==='enter'||k===' ')interact();
   if(k==='1')switchTab('now'); if(k==='2')switchTab('dex'); if(k==='3')switchTab('help');
+  if(k==='m'){ e.preventDefault(); toggleAudio(); }
 });
 window.addEventListener('keyup',function(e){keys[e.key.toLowerCase()]=0;});
 window.addEventListener('blur',function(){keys={};joyReset();});
@@ -1280,6 +1399,18 @@ document.addEventListener('touchend',allFingersUp,{passive:true});
 document.addEventListener('touchcancel',allFingersUp,{passive:true});
 joyReset();
 document.getElementById('abtn').addEventListener('click',function(e){e.preventDefault();interact();});
+
+/* ============ 音訊開關 UI ============ */
+var audioBtn=document.getElementById('audio-btn');
+function syncAudioBtn(on){
+  audioBtn.setAttribute('aria-pressed', on?'true':'false');
+  audioBtn.textContent = on?'🔊':'🔇';
+  audioBtn.title = on?'聲音開（按 M 關閉）':'聲音關（按 M 開啟）';
+}
+function toggleAudio(){ syncAudioBtn(SND.toggle()); }
+audioBtn.addEventListener('click',function(e){e.preventDefault();toggleAudio();});
+// 預設關閉：reload 後都是靜音，不寫入 localStorage，避免在辦公室被嚇到
+syncAudioBtn(false);
 
 function switchTab(name){
   state.tab=name;

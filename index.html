@@ -178,16 +178,18 @@ button{font:inherit;color:inherit}
   .panel{order:1}
   .tabbody{min-height:0}
   .sign h1{font-size:21px}
-  /* 小地圖浮在螢幕右上，捲到遊戲也看得到路況 */
+  /* 小地圖浮在螢幕右上，可拖曳移動 */
   canvas.minimap{
     position:fixed; top:8px; right:8px;
-    width:124px; height:auto;
+    width:184px; height:auto;
     z-index:50;
     border-radius:4px;
-    box-shadow:0 3px 10px rgba(0,0,0,.35);
-    border:1px solid rgba(0,0,0,.25);
-    pointer-events:none; /* 不吃手指事件，不會擋到底下的 tab 切換 */
+    box-shadow:0 4px 14px rgba(0,0,0,.4);
+    border:1px solid rgba(0,0,0,.3);
+    touch-action:none;        /* 拖曳時不會觸發頁面滾動 */
+    cursor:grab;
   }
+  canvas.minimap.dragging{cursor:grabbing;box-shadow:0 6px 18px rgba(0,0,0,.55)}
   .maplabel{display:none}
 }
 @media (prefers-reduced-motion:reduce){
@@ -1419,6 +1421,81 @@ document.addEventListener('touchend',allFingersUp,{passive:true});
 document.addEventListener('touchcancel',allFingersUp,{passive:true});
 joyReset();
 document.getElementById('abtn').addEventListener('click',function(e){e.preventDefault();interact();});
+
+/* ============ 浮動小地圖拖曳（手機直立模式才有意義，桌機也不會壞） ============ */
+(function(){
+  var mm=document.getElementById('minimap');
+  if(!mm)return;
+  var MM_KEY='neihu-stroll-mm-pos';
+  // 讀回上次放的位置
+  try{
+    var saved=JSON.parse(localStorage.getItem(MM_KEY)||'null');
+    if(saved && typeof saved.left==='number' && typeof saved.top==='number'){
+      applyPos(saved.left,saved.top);
+    }
+  }catch(e){}
+  function applyPos(left,top){
+    // 用 left/top 而不是 right/bottom，拖完比較直覺
+    mm.style.left=left+'px';
+    mm.style.top=top+'px';
+    mm.style.right='auto';
+  }
+  function clamp(v,lo,hi){return v<lo?lo:v>hi?hi:v;}
+  function constrain(left,top){
+    var r=mm.getBoundingClientRect();
+    var pad=4;
+    return {
+      left:clamp(left,pad,innerWidth-r.width-pad),
+      top:clamp(top,pad,innerHeight-r.height-pad)
+    };
+  }
+  var dragging=false, startX=0, startY=0, baseL=0, baseT=0, moved=false, pid=null;
+  mm.addEventListener('pointerdown',function(e){
+    // 只有 fixed 定位時（也就是手機直立 media query 生效時）才能拖
+    if(getComputedStyle(mm).position!=='fixed')return;
+    pid=e.pointerId;
+    dragging=true; moved=false;
+    var r=mm.getBoundingClientRect();
+    baseL=r.left; baseT=r.top;
+    startX=e.clientX; startY=e.clientY;
+    mm.classList.add('dragging');
+    try{mm.setPointerCapture(pid);}catch(_){}
+    e.preventDefault();
+  });
+  mm.addEventListener('pointermove',function(e){
+    if(!dragging||e.pointerId!==pid)return;
+    var dx=e.clientX-startX, dy=e.clientY-startY;
+    if(!moved && Math.abs(dx)+Math.abs(dy)<4)return; // 小動作不當拖曳
+    moved=true;
+    var p=constrain(baseL+dx, baseT+dy);
+    applyPos(p.left,p.top);
+    e.preventDefault();
+  });
+  function endDrag(e){
+    if(!dragging)return;
+    if(e && e.pointerId!==pid)return;
+    dragging=false;
+    mm.classList.remove('dragging');
+    try{mm.releasePointerCapture(pid);}catch(_){}
+    pid=null;
+    if(moved){
+      var r=mm.getBoundingClientRect();
+      try{localStorage.setItem(MM_KEY,JSON.stringify({left:r.left,top:r.top}));}catch(_){}
+    }
+  }
+  mm.addEventListener('pointerup',endDrag);
+  mm.addEventListener('pointercancel',endDrag);
+  // 螢幕轉向或 resize 時把它拉回畫面內
+  window.addEventListener('resize',function(){
+    if(getComputedStyle(mm).position!=='fixed')return;
+    var r=mm.getBoundingClientRect();
+    var p=constrain(r.left,r.top);
+    if(p.left!==r.left||p.top!==r.top){
+      applyPos(p.left,p.top);
+      try{localStorage.setItem(MM_KEY,JSON.stringify(p));}catch(_){}
+    }
+  });
+})();
 
 /* ============ 音訊開關 UI ============ */
 var audioBtn=document.getElementById('audio-btn');

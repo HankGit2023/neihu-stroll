@@ -95,7 +95,10 @@ button{font:inherit;color:inherit}
 @media (pointer:coarse){.pad{display:flex}#stickzone,#stick{display:block}}
 .abtn{background:rgba(22,28,24,.55);color:#f3f7f1;border:1px solid rgba(243,247,241,.3);
   -webkit-user-select:none;user-select:none;touch-action:none;display:grid;place-items:center;
-  width:68px;height:68px;border-radius:50%;pointer-events:auto;font-size:15px;font-weight:700;letter-spacing:.08em}
+  width:68px;height:68px;border-radius:50%;pointer-events:auto;font-size:15px;font-weight:700;letter-spacing:.08em;
+  transition:opacity .18s ease, background .18s ease, color .18s ease}
+.abtn.off{opacity:.42;color:#c6ccc4;font-weight:500;letter-spacing:.02em}
+.abtn.ready{background:rgba(46,125,107,.78);border-color:rgba(243,247,241,.55)}
 
 /* ---- 聲音開關 ---- */
 .audio-btn{position:absolute;right:10px;top:10px;z-index:5;
@@ -1420,7 +1423,19 @@ function allFingersUp(e){ if(e.touches && e.touches.length===0) joyReset(); }
 document.addEventListener('touchend',allFingersUp,{passive:true});
 document.addEventListener('touchcancel',allFingersUp,{passive:true});
 joyReset();
-document.getElementById('abtn').addEventListener('click',function(e){e.preventDefault();interact();});
+var abtnEl=document.getElementById('abtn');
+abtnEl.addEventListener('click',function(e){e.preventDefault();interact();});
+// 行動按鈕狀態同步：有可互動對象→綠底發亮；沒有→淡出，仍可按但不會動作
+var _abtnText='', _abtnReady=null;
+function setAbtn(text, ready){
+  if(text!==_abtnText){ abtnEl.textContent=text; _abtnText=text; }
+  if(ready!==_abtnReady){
+    abtnEl.classList.toggle('ready', !!ready);
+    abtnEl.classList.toggle('off', !ready);
+    _abtnReady=ready;
+  }
+}
+setAbtn('——', false);
 
 /* ============ 浮動小地圖拖曳（手機直立模式才有意義，桌機也不會壞） ============ */
 (function(){
@@ -1657,7 +1672,17 @@ function loop(t){
       : ('看看'+nearest.o.t);
     hintEl.innerHTML='<kbd>E</kbd>'+label;
     hintEl.classList.add('on');
-  }else hintEl.classList.remove('on');
+    // 行動按鈕用短版動詞，塞得進 68px 圓鈕
+    var shortLabel = nearest.k==='item'?'撿'
+      : nearest.k==='M'? '揍'
+      : nearest.k==='npc'? (nearest.o.join
+          ? (nearest.o.inParty ? '回去'
+            : nearest.o.ask>0 ? '走'
+            : '抽菸')
+          : '說話')
+      : '查看';
+    setAbtn(shortLabel, true);
+  }else{ hintEl.classList.remove('on'); setAbtn('——', false); }
 
   hudTick+=dt;
   if(hudTick>0.25){

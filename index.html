@@ -49,7 +49,13 @@ body{
   font-family:"Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
   font-size:14px; line-height:1.65; margin:0;
   -webkit-font-smoothing:antialiased;
+  /* 手機上點 UI 不要選到文字 / 不要跳 iOS 的長按選單 / 不要藍色點擊閃光 */
+  -webkit-user-select:none; user-select:none;
+  -webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;
 }
+/* 日誌和圖鑑的描述文字還是允許框選複製（長按才會觸發） */
+.log, .dex .desc, .note{-webkit-user-select:text; user-select:text}
 button{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--focus); outline-offset:2px}
 

@@ -173,6 +173,9 @@ button{font:inherit;color:inherit}
 
 @media (max-width:920px){
   .stage{grid-template-columns:1fr}
+  /* 手機直立：遊戲放到下半，拇指才搆得到；小地圖和資訊卡放上面 */
+  .viewport{order:2}
+  .panel{order:1}
   .tabbody{min-height:0}
   .sign h1{font-size:21px}
 }

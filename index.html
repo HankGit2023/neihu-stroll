@@ -70,18 +70,12 @@ button{font:inherit;color:inherit}
   padding-bottom:calc(28px + env(safe-area-inset-bottom));
   padding-left:calc(16px + env(safe-area-inset-left));
   padding-right:calc(16px + env(safe-area-inset-right))}
-/* ---- Focus 模式：遊戲 canvas 吃滿螢幕 + 浮動小地圖還在 ---- */
+/* ---- Focus 模式：遊戲 canvas 吃滿螢幕，小地圖以 viewport 子元素身份跟著走 ---- */
 body.focus-mode{background:#000; overflow:hidden}
 body.focus-mode .sign,
 body.focus-mode .rule,
+body.focus-mode .panel,
 body.focus-mode .foot{display:none}
-/* panel 不整個 display:none，否則裡面的 minimap 會跟著死掉 */
-body.focus-mode .panel{display:contents}
-body.focus-mode .tabs{display:none}
-body.focus-mode #tab-dex,
-body.focus-mode #tab-help{display:none !important}
-body.focus-mode #tab-now{display:contents}
-body.focus-mode #tab-now > *:not(canvas.minimap){display:none}
 /* viewport 直接 position:fixed 填滿螢幕，繞過 grid/flex 父元素的高度計算 */
 body.focus-mode .viewport{
   position:fixed;
@@ -106,8 +100,11 @@ body.focus-mode .viewport canvas{
 body.focus-mode .hud-btn{top:calc(10px + env(safe-area-inset-top))}
 body.focus-mode .audio-btn{right:calc(10px + env(safe-area-inset-right))}
 body.focus-mode .fs-btn{right:calc(56px + env(safe-area-inset-right))}
-/* 浮動小地圖預設位置也避開瀏海 */
-body.focus-mode canvas.minimap{top:calc(8px + env(safe-area-inset-top))}
+/* 小地圖預設在 viewport 左上，加 safe-area 避開瀏海和橫向側邊 notch */
+body.focus-mode canvas.minimap{
+  top:calc(8px + env(safe-area-inset-top));
+  left:calc(8px + env(safe-area-inset-left));
+}
 /* 黃色 toast 不要被動態島吃掉 */
 body.focus-mode .toast{top:calc(14px + env(safe-area-inset-top))}
 /* 虛擬搖桿 / 動作鈕區避開 home indicator 和側邊 notch */
@@ -194,7 +191,21 @@ body.focus-mode .pad{
 .tabbody{padding:14px;display:none;min-height:440px}
 .tabbody.on{display:block}
 
-.minimap{width:100%;display:block;border:1px solid var(--line2);border-radius:3px;background:var(--sunk);image-rendering:auto}
+/* 小地圖永遠當 viewport 的浮動 HUD。預設在 viewport 左上角，避開右上的 HUD 鈕。 */
+.minimap{
+  position:absolute; top:8px; left:8px;
+  width:184px; height:auto;
+  display:block;
+  border:1px solid var(--line2);
+  border-radius:4px;
+  background:var(--sunk);
+  box-shadow:0 3px 10px rgba(0,0,0,.3);
+  image-rendering:auto;
+  z-index:40;
+  touch-action:none;
+  cursor:grab;
+}
+.minimap.dragging{cursor:grabbing;box-shadow:0 6px 18px rgba(0,0,0,.55)}
 .maplabel{display:flex;justify-content:space-between;align-items:baseline;margin:9px 0 14px;
   font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.1em;color:var(--ink3)}
 
@@ -239,18 +250,6 @@ body.focus-mode .pad{
   .panel{order:1}
   .tabbody{min-height:0}
   .sign h1{font-size:21px}
-  /* 小地圖浮在螢幕右上，可拖曳移動 */
-  canvas.minimap{
-    position:fixed; top:8px; right:8px;
-    width:184px; height:auto;
-    z-index:50;
-    border-radius:4px;
-    box-shadow:0 4px 14px rgba(0,0,0,.4);
-    border:1px solid rgba(0,0,0,.3);
-    touch-action:none;        /* 拖曳時不會觸發頁面滾動 */
-    cursor:grab;
-  }
-  canvas.minimap.dragging{cursor:grabbing;box-shadow:0 6px 18px rgba(0,0,0,.55)}
   .maplabel{display:none}
 }
 @media (prefers-reduced-motion:reduce){
@@ -277,6 +276,7 @@ body.focus-mode .pad{
   <main class="stage">
     <section class="viewport">
       <canvas id="game" width="960" height="600"></canvas>
+      <canvas class="minimap" id="minimap" width="300" height="228"></canvas>
       <button class="hud-btn fs-btn" id="fs-btn" type="button" aria-pressed="false" aria-label="全螢幕切換" title="全螢幕（按 F 切換）">⛶</button>
       <button class="hud-btn audio-btn" id="audio-btn" type="button" aria-pressed="false" aria-label="聲音開關" title="聲音關（按 M 開啟）">🔇</button>
       <div class="hint" id="hint"></div>
@@ -296,7 +296,6 @@ body.focus-mode .pad{
       </div>
 
       <div class="tabbody on" id="tab-now">
-        <canvas class="minimap" id="minimap" width="300" height="228"></canvas>
         <div class="maplabel"><span id="mm-coord">內湖路・文德站前</span><span>NEIHU DIST.</span></div>
         <div class="card" id="poicard">
           <div class="eyebrow" id="poi-tag">現在位置</div>
@@ -1498,41 +1497,53 @@ function setAbtn(text, ready){
 }
 setAbtn('——', false);
 
-/* ============ 浮動小地圖拖曳（手機直立模式才有意義，桌機也不會壞） ============ */
+/* ============ 浮動小地圖拖曳（相對於 viewport，不論 absolute 還是 fixed 都能拖） ============ */
 (function(){
   var mm=document.getElementById('minimap');
   if(!mm)return;
+  var vp=document.querySelector('.viewport');
   var MM_KEY='neihu-stroll-mm-pos';
-  // 讀回上次放的位置
+  // 讀回上次放的位置（舊版可能存的是螢幕座標，等版面渲染好再夾一次把它拉回 viewport 內）
   try{
     var saved=JSON.parse(localStorage.getItem(MM_KEY)||'null');
     if(saved && typeof saved.left==='number' && typeof saved.top==='number'){
       applyPos(saved.left,saved.top);
+      requestAnimationFrame(function(){
+        var mmR=mm.getBoundingClientRect(), b=bounds();
+        var p=constrain(mmR.left-b.originX, mmR.top-b.originY);
+        applyPos(p.left,p.top);
+      });
     }
   }catch(e){}
   function applyPos(left,top){
-    // 用 left/top 而不是 right/bottom，拖完比較直覺
     mm.style.left=left+'px';
     mm.style.top=top+'px';
     mm.style.right='auto';
   }
   function clamp(v,lo,hi){return v<lo?lo:v>hi?hi:v;}
+  // 相對 viewport 的拖曳邊界
+  function bounds(){
+    var pr=(vp||document.documentElement).getBoundingClientRect();
+    return {w:pr.width, h:pr.height, originX:pr.left, originY:pr.top};
+  }
   function constrain(left,top){
-    var r=mm.getBoundingClientRect();
+    var mmR=mm.getBoundingClientRect();
+    var b=bounds();
     var pad=4;
     return {
-      left:clamp(left,pad,innerWidth-r.width-pad),
-      top:clamp(top,pad,innerHeight-r.height-pad)
+      left:clamp(left,pad,b.w-mmR.width-pad),
+      top:clamp(top,pad,b.h-mmR.height-pad)
     };
   }
   var dragging=false, startX=0, startY=0, baseL=0, baseT=0, moved=false, pid=null;
   mm.addEventListener('pointerdown',function(e){
-    // 只有 fixed 定位時（也就是手機直立 media query 生效時）才能拖
-    if(getComputedStyle(mm).position!=='fixed')return;
     pid=e.pointerId;
     dragging=true; moved=false;
-    var r=mm.getBoundingClientRect();
-    baseL=r.left; baseT=r.top;
+    // 現在的位置換算成「相對 viewport」的 left/top
+    var mmR=mm.getBoundingClientRect();
+    var b=bounds();
+    baseL=mmR.left-b.originX;
+    baseT=mmR.top-b.originY;
     startX=e.clientX; startY=e.clientY;
     mm.classList.add('dragging');
     try{mm.setPointerCapture(pid);}catch(_){}
@@ -1541,7 +1552,7 @@ setAbtn('——', false);
   mm.addEventListener('pointermove',function(e){
     if(!dragging||e.pointerId!==pid)return;
     var dx=e.clientX-startX, dy=e.clientY-startY;
-    if(!moved && Math.abs(dx)+Math.abs(dy)<4)return; // 小動作不當拖曳
+    if(!moved && Math.abs(dx)+Math.abs(dy)<4)return;
     moved=true;
     var p=constrain(baseL+dx, baseT+dy);
     applyPos(p.left,p.top);
@@ -1555,18 +1566,21 @@ setAbtn('——', false);
     try{mm.releasePointerCapture(pid);}catch(_){}
     pid=null;
     if(moved){
-      var r=mm.getBoundingClientRect();
-      try{localStorage.setItem(MM_KEY,JSON.stringify({left:r.left,top:r.top}));}catch(_){}
+      // 儲存 viewport-相對座標
+      var mmR=mm.getBoundingClientRect();
+      var b=bounds();
+      try{localStorage.setItem(MM_KEY,JSON.stringify({left:mmR.left-b.originX, top:mmR.top-b.originY}));}catch(_){}
     }
   }
   mm.addEventListener('pointerup',endDrag);
   mm.addEventListener('pointercancel',endDrag);
-  // 螢幕轉向或 resize 時把它拉回畫面內
+  // 螢幕轉向或 resize 時把它拉回 viewport 範圍
   window.addEventListener('resize',function(){
-    if(getComputedStyle(mm).position!=='fixed')return;
-    var r=mm.getBoundingClientRect();
-    var p=constrain(r.left,r.top);
-    if(p.left!==r.left||p.top!==r.top){
+    var mmR=mm.getBoundingClientRect();
+    var b=bounds();
+    var cur={left:mmR.left-b.originX, top:mmR.top-b.originY};
+    var p=constrain(cur.left,cur.top);
+    if(p.left!==cur.left||p.top!==cur.top){
       applyPos(p.left,p.top);
       try{localStorage.setItem(MM_KEY,JSON.stringify(p));}catch(_){}
     }

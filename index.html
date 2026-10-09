@@ -71,34 +71,28 @@ button{font:inherit;color:inherit}
   padding-left:calc(16px + env(safe-area-inset-left));
   padding-right:calc(16px + env(safe-area-inset-right))}
 /* ---- Focus 模式：遊戲 canvas 吃滿螢幕 + 浮動小地圖還在 ---- */
-body.focus-mode{background:#000}
+body.focus-mode{background:#000; overflow:hidden}
 body.focus-mode .sign,
 body.focus-mode .rule,
 body.focus-mode .foot{display:none}
-/* panel 不整個 display:none，否則裡面的 minimap 會跟著死掉；
-   改成只隱藏 panel 的「非 minimap」內容 */
+/* panel 不整個 display:none，否則裡面的 minimap 會跟著死掉 */
 body.focus-mode .panel{display:contents}
 body.focus-mode .tabs{display:none}
 body.focus-mode #tab-dex,
 body.focus-mode #tab-help{display:none !important}
 body.focus-mode #tab-now{display:contents}
 body.focus-mode #tab-now > *:not(canvas.minimap){display:none}
-body.focus-mode .shell{
-  padding:0; gap:0; max-width:none;
-  min-height:100vh; min-height:100dvh;
-}
-body.focus-mode .stage{
-  grid-template-columns:1fr; gap:0;
-  align-items:stretch;  /* 讓 viewport 吃滿 grid cell 高度 */
-  min-height:100vh; min-height:100dvh;
-}
+/* viewport 直接 position:fixed 填滿螢幕，繞過 grid/flex 父元素的高度計算 */
 body.focus-mode .viewport{
-  border:0; border-radius:0;
-  height:100vh; height:100dvh;  /* 明確高度，不只 min */
+  position:fixed;
+  inset:0;
+  width:100vw; width:100dvw;
+  height:100vh; height:100dvh;
   overflow:hidden;
-  position:relative;
+  border:0; border-radius:0;
+  background:#000;
 }
-/* canvas 絕對定位吃滿整個 viewport，object-fit:cover 保持比例並裁掉溢出 */
+/* canvas 絕對定位吃滿 viewport，object-fit:cover 做比例裁切 */
 body.focus-mode .viewport canvas{
   position:absolute;
   inset:0;

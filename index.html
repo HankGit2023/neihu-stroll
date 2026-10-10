@@ -917,7 +917,14 @@ var cv=document.getElementById('game'), ctx=cv.getContext('2d');
 var cam={x:state.px,y:state.py};
 function resize(){
   var r=cv.parentElement.getBoundingClientRect();
-  var w=Math.max(320,Math.round(r.width)), h=Math.round(Math.min(640,Math.max(360,w*0.625)));
+  var w=Math.max(320,Math.round(r.width)), h;
+  if(document.body.classList.contains('focus-mode')){
+    // Focus 模式：viewport 已 position:fixed 撐滿螢幕，畫布直接用整個螢幕的高度。
+    // render() 依 cv.vw/cv.vh 畫，所以直立時是「看到更多地圖」而不是放大裁切。
+    h=Math.max(200,Math.round(r.height));
+  }else{
+    h=Math.round(Math.min(640,Math.max(360,w*0.625)));
+  }
   var dpr=Math.min(2,window.devicePixelRatio||1);
   cv.width=w*dpr; cv.height=h*dpr; cv.style.height=h+'px';
   ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -1625,6 +1632,11 @@ function toggleFullscreen(){
     }
   }
   syncFsBtn();
+  refitCanvas();
+}
+// 切換 focus 模式後版面改了，但不一定會觸發 window resize，要自己重算畫布尺寸
+function refitCanvas(){
+  requestAnimationFrame(function(){ window.dispatchEvent(new Event('resize')); });  // 會觸發 resize() 和小地圖重新夾位置
 }
 function syncFsBtn(){
   var on = document.body.classList.contains('focus-mode') || !!fsElement();
@@ -1636,12 +1648,14 @@ fsBtn.addEventListener('click',function(e){e.preventDefault();toggleFullscreen()
 document.addEventListener('fullscreenchange',function(){
   if(!fsElement() && document.body.classList.contains('focus-mode')){
     document.body.classList.remove('focus-mode');
+    refitCanvas();
   }
   syncFsBtn();
 });
 document.addEventListener('webkitfullscreenchange',function(){
   if(!fsElement() && document.body.classList.contains('focus-mode')){
     document.body.classList.remove('focus-mode');
+    refitCanvas();
   }
   syncFsBtn();
 });

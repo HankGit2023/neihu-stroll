@@ -106,6 +106,14 @@ body.focus-mode canvas.minimap{
   top:calc(8px + env(safe-area-inset-top));
   left:calc(8px + env(safe-area-inset-left));
 }
+/* 對戰中：搖桿、行動鈕、小地圖、提示都收起來，觸控直接點在 canvas 上選選單 */
+body.in-battle .pad,
+body.in-battle #stickzone,
+body.in-battle #stick,
+body.in-battle .minimap,
+body.in-battle .hint,
+body.in-battle .toast{display:none!important}
+body.in-battle #game{cursor:pointer}
 /* 黃色 toast 不要被動態島吃掉 */
 body.focus-mode .toast{top:calc(14px + env(safe-area-inset-top))}
 /* 虛擬搖桿 / 動作鈕區避開 home indicator 和側邊 notch */
@@ -329,6 +337,7 @@ body.focus-mode .pad{
         <p class="note">地圖上某處有個穿水藍色風衣、下巴有點厚的傢伙，叫馬哥，頭上永遠掛著一句「那個前端真的很屌..」。他會自己換地方，小地圖上的橘點就是他。走到他旁邊按 <b>E</b> 可以揍下去。</p>
         <p class="note">內科和 737 巷一帶有四個掛著名字的同事——羅素、Kevin、Hank、Vivian。走過去互動，他會問「要一起抽煙嗎？」，再按 <b>E</b>一次就等於回他「走」，然後他會排成一列跟著你。停下來不動，他們會自己點起菸。再互動一次就讓他回去上班。</p>
     <p class="note">隊伍裡的人只要離馬哥夠近，你揍下去時他們會一起揮拳。</p>
+    <p class="note">洲子街口站著一個<b>趕時程的 PM</b>。跟他說話，他講完一句就會直接開打：回合制對戰，選「戰鬥」再挑一招，誰的 HP 先歸零誰就輸。「道具」是胡椒餅，「同事」要有人跟著你才喊得出來。對戰中用方向鍵選、<b>E</b> 確認、<b>Esc</b> 返回，手機直接點選項。</p>
     <p class="note">時間會自己走，約十六分鐘一個日夜。天黑後路燈會亮，山上和園區才有東西可以撿。</p>
         <div class="act">
           <button id="btn-rest">休息一下（跳到下個時段）</button>
@@ -429,6 +438,18 @@ var SND=(function(){
     o.connect(g); g.connect(master);
     o.start(t0); o.stop(t0+0.2);
   }
+  // 對戰用的電子音：選單游標、確認、驚嘆號、開戰。delay 秒後播
+  function blip(freq,dur,delay,type,gain){
+    if(!enabled||!ac)return;
+    var t0=ac.currentTime+(delay||0), d=dur||0.06;
+    var o=ac.createOscillator(), g=ac.createGain();
+    o.type=type||'square'; o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(gain||0.045,t0+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+d);
+    o.connect(g); g.connect(master);
+    o.start(t0); o.stop(t0+d+0.02);
+  }
   function setEnabled(on){
     enabled=!!on;
     if(enabled){
@@ -449,7 +470,8 @@ var SND=(function(){
     isOn:function(){return enabled;},
     toggle:function(){setEnabled(!enabled);return enabled;},
     setEnabled:setEnabled,
-    punch:punch
+    punch:punch,
+    blip:blip
   };
 })();
 
@@ -659,7 +681,12 @@ var NPCS=[
  {x:20,y:47,c:'#efe9dd',c2:'#43679b',n:'羅素',join:1,l:['需求又改了，這是第三次。','我剛把那個 bug 關掉，它自己又開了。','你有看到我的識別證嗎？']},
  {x:33,y:52,c:'#f0e6d8',c2:'#3f7f68',n:'Kevin',join:1,l:['站立會議站了四十分鐘。','我中午都走去 737 巷，順便散步。','早上這棟的電梯根本擠不上去。']},
  {x:60,y:37,c:'#ebe5d7',c2:'#8a5a3b',n:'Hank',join:1,l:['這條巷子我每一攤都吃過。','胡椒餅要趁燙，涼了就不是那回事。','先別急著走，等人少一點。']},
- {x:26,y:58,c:'#f4e3d5',c2:'#a2527c',n:'Vivian',join:1,l:['文件寄給你了，記得收信。','樓下咖啡買一送一，要不要？','今天天氣好到不想回座位。']}
+ {x:26,y:58,c:'#f4e3d5',c2:'#a2527c',n:'Vivian',join:1,l:['文件寄給你了，記得收信。','樓下咖啡買一送一，要不要？','今天天氣好到不想回座位。']},
+ // 路人對戰：講完 pre 那句就開打（見「路人對戰」區塊）
+ {x:48,y:47,c:'#f1e2d0',c2:'#6b4f9a',n:'趕時程的 PM',battle:1,
+  pre:'你就是說今天能上線的那個人吧？',
+  win:'……好啦，時程我再去喬。', lose:'那就這樣說定了，今天上線。',
+  l:['先估個時程給我。']}
 ];
 
 /* ============ 狀態 ============ */
@@ -670,7 +697,7 @@ var state={
 };
 var KEY='neihu-stroll-v1';
 function save(){
-  try{localStorage.setItem(KEY,JSON.stringify({found:state.found,visited:state.visited,log:state.log.slice(0,30),clock:state.clock,hits:state.hits||0,party:state.party||[]}));}catch(e){}
+  try{localStorage.setItem(KEY,JSON.stringify({found:state.found,visited:state.visited,log:state.log.slice(0,30),clock:state.clock,hits:state.hits||0,party:state.party||[],btWins:state.btWins||0}));}catch(e){}
 }
 function load(){
   try{
@@ -681,6 +708,7 @@ function load(){
       state.log=Array.isArray(d.log)?d.log:[]; 
       if(typeof d.clock==='number')state.clock=d.clock;
       if(typeof d.hits==='number')state.hits=d.hits;
+      if(typeof d.btWins==='number')state.btWins=d.btWins;
       if(Array.isArray(d.party))state.party=d.party;
     }
   }catch(e){}
@@ -1167,6 +1195,7 @@ function render(dt,time){
   cam.x+=(tx-cam.x)*ls; cam.y+=(ty-cam.y)*ls;
   var ox=Math.max(0,Math.min(WW-vw,cam.x)), oy=Math.max(0,Math.min(WH-vh,cam.y));
   ox=Math.round(ox);oy=Math.round(oy);
+  render.ox=ox; render.oy=oy;   // 對戰前的驚嘆號要知道鏡頭位置
 
   var x0=Math.max(0,(ox/TS|0)-1), x1=Math.min(MW-1,((ox+vw)/TS|0)+1);
   var y0=Math.max(0,(oy/TS|0)-1), y1=Math.min(MH-1,((oy+vh)/TS|0)+1);
@@ -1199,7 +1228,7 @@ function render(dt,time){
     else if(L.k==='b')drawBuilding(L.o,ox,oy);
     else if(L.k==='n'){
       var nb=(L.o.moving&&!reduce)?Math.sin((L.o.walk||0)*11)*2:0;
-      drawPerson(L.o.x*TS-ox,L.o.y*TS-oy,L.o.c,L.o.c2,L.o.dir||'down',nb,L.o.join?L.o.n:null);
+      drawPerson(L.o.x*TS-ox,L.o.y*TS-oy,L.o.c,L.o.c2,L.o.dir||'down',nb,(L.o.join||L.o.battle)?L.o.n:null);
     }
     else if(L.k==='i')drawItem(L.o,ox,oy,time);
     else if(L.k==='M')drawM(ox,oy,time);
@@ -1352,7 +1381,8 @@ function interact(){
     save();
   }else if(t.k==='npc'){
     var n=t.o;
-    if(n.join&&n.inParty){                       // 讓他回去上班
+    if(n.battle){ startBattle(n); return; }      // 路人對戰
+    if(n.join&&n.inParty){                      // 讓他回去上班
       n.inParty=0; n.hx=n.x;n.hy=n.y;n.tx=n.x;n.ty=n.y;n.wait=1;
       state.party=state.party.filter(function(q){return q!==n.n;});
       say(n,'那我先回去了。',3);
@@ -1386,6 +1416,516 @@ function interact(){
     updateHUD();save();
   }
   switchTab('now');
+}
+
+/* ============ 路人對戰（寶可夢風格） ============
+   和 battle:1 的路人說話 → 頭上冒「！」、底部對話框講完一句 → 閃屏 + 黑條過場 →
+   雙方滑入場 → 回合制（戰鬥／道具／同事／逃跑，戰鬥再四招選一）→ 任一方 HP 歸零 → 淡出回地圖。
+   整場畫在遊戲 canvas 上。觸控靠 BT.hits 點擊區；鍵盤方向鍵移游標、E/Enter/空白確認、Esc/X 返回。
+   流程用一條事件佇列（BT.q）跑：訊息、攻擊動畫、受擊閃爍、血條下降、倒下、結束。
+   數值在排進佇列時就算好，畫面上的血條用 shown 慢慢追上實際 hp。 */
+var MOVES_ME=[
+  {n:'揮拳',      type:'一般', pow:40, acc:100, pp:35, fx:'hit'},
+  {n:'胡椒餅燙嘴', type:'火',   pow:60, acc:95,  pp:15, fx:'fire'},
+  {n:'已讀不回',   type:'幽靈', pow:0,  acc:100, pp:20, fx:'ghost', eff:{who:'target',stat:'atk',d:-1}},
+  {n:'衝刺撞擊',   type:'一般', pow:80, acc:85,  pp:10, fx:'dash', recoil:0.25}
+];
+var MOVES_FOE=[
+  {n:'需求變更',   type:'超能力', pow:45, acc:100, pp:20, fx:'psy'},
+  {n:'臨時開會',   type:'一般',   pow:0,  acc:100, pp:15, fx:'meeting', eff:{who:'target',stat:'def',d:-1}},
+  {n:'催進度',     type:'格鬥',   pow:55, acc:95,  pp:15, fx:'hit'},
+  {n:'這很簡單吧', type:'惡',     pow:65, acc:90,  pp:10, fx:'dark'}
+];
+var BT={on:false};
+var BT_FONT='"Noto Sans TC",system-ui,sans-serif';
+
+// 全螢幕時 canvas 貼齊螢幕頂端/底端，要自己避開瀏海和 home indicator
+var safeProbe=document.createElement('div');
+safeProbe.style.cssText='position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;'+
+  'padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+document.body.appendChild(safeProbe);
+var safeIn={t:0,b:0};
+function measureSafe(){
+  if(!document.body.classList.contains('focus-mode')){safeIn={t:0,b:0};return;}
+  var cs=getComputedStyle(safeProbe);
+  safeIn={t:parseFloat(cs.paddingTop)||0, b:parseFloat(cs.paddingBottom)||0};
+}
+window.addEventListener('resize',measureSafe);
+
+function btClamp(v,a,b){return v<a?a:v>b?b:v;}
+function btEase(p){p=btClamp(p,0,1);return 1-Math.pow(1-p,3);}
+function btStage(st){return st>=0?(2+st)/2:2/(2-st);}
+function btFighter(o,moves){
+  o.max=o.hp; o.shown=o.hp; o.atkSt=0; o.defSt=0; o.fp=0;
+  o.moves=moves.map(function(m){var c={};for(var k in m)c[k]=m[k];c.left=m.pp;return c;});
+  return o;
+}
+
+function startBattle(n){
+  if(BT.on)return;
+  keys={}; joyReset();
+  var dx=state.px/TS-n.x, dy=state.py/TS-n.y;               // 路人轉頭看你、你也轉向他
+  n.dir=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
+  state.dir=Math.abs(dx)>Math.abs(dy)?(dx>0?'left':'right'):(dy>0?'up':'down');
+  n.tx=n.x; n.ty=n.y; n.sayT=0;
+  BT={on:true, phase:'talk', t:0, npc:n, q:[], cur:null, ct:0,
+      text:n.n+'：「'+n.pre+'」', shown:0, manual:true,
+      cursor:0, mcursor:0, hits:[], boxT:0, buns:2, cheered:false, result:null, finished:false,
+      me:btFighter({side:'me',name:'你',lv:12,hp:44,atk:20,def:16,spd:18,c:'#f1e3cf',c2:'#2e7d6b'},MOVES_ME),
+      foe:btFighter({side:'foe',name:n.n,lv:11,hp:40,atk:17,def:15,spd:14,c:n.c,c2:n.c2},MOVES_FOE)};
+  document.body.classList.add('in-battle');
+  measureSafe();
+  SND.blip(1320,0.14,0,'square',0.05);
+}
+
+/* ---- 事件佇列 ---- */
+function bq(o){BT.q.push(o);}
+function bSay(s,manual){bq({t:'msg',s:s,manual:!!manual});}
+function btRun(){BT.phase='script'; btNext();}
+function btNext(){
+  BT.cur=BT.q.shift()||null; BT.ct=0;
+  var c=BT.cur;
+  if(!c){ BT.phase='menu'; BT.text='你要怎麼做？'; BT.shown=BT.text.length; return; }
+  if(c.t==='msg'){ BT.text=c.s; BT.shown=0; BT.manual=c.manual; }
+  else if(c.t==='atk'){ if(c.pow>0)SND.punch(0.3); else SND.blip(440,0.25,0.3,'sine',0.05); }
+  else if(c.t==='end'){ BT.phase='out'; BT.t=0; BT.cur=null; }
+}
+
+/* ---- 招式結算 ---- */
+function btUse(a,d,m){
+  if(a.hp<=0||d.hp<=0)return;
+  bSay(a.name+'使出了「'+m.n+'」！');
+  if(Math.random()*100>=m.acc){ bSay('可是沒有打中！'); return; }
+  bq({t:'atk',who:a.side,fx:m.fx,pow:m.pow});
+  if(m.pow>0){
+    var crit=Math.random()<1/16;
+    var base=((2*a.lv/5+2)*m.pow*(a.atk*btStage(a.atkSt))/(d.def*btStage(d.defSt)))/50+2;
+    var dmg=Math.max(1,Math.floor(base*(0.85+Math.random()*0.15)*(crit?1.5:1)));
+    d.hp=Math.max(0,d.hp-dmg);
+    bq({t:'hit',who:d.side});
+    bq({t:'hp',who:d.side,to:d.hp});
+    if(crit)bSay('會心一擊！');
+    if(m.recoil){
+      var r=Math.max(1,Math.floor(dmg*m.recoil));
+      a.hp=Math.max(0,a.hp-r);
+      bq({t:'hp',who:a.side,to:a.hp});
+      bSay(a.name+'受到了反作用力的傷害！');
+    }
+    if(d.hp<=0){ bq({t:'faint',who:d.side}); bSay(d.name+'倒下了！'); }
+    if(a.hp<=0){ bq({t:'faint',who:a.side}); bSay(a.name+'倒下了！'); }
+  }else if(m.eff){
+    var tg=m.eff.who==='self'?a:d, key=m.eff.stat+'St', stat=m.eff.stat==='atk'?'攻擊':'防禦';
+    if((m.eff.d<0&&tg[key]<=-6)||(m.eff.d>0&&tg[key]>=6)){ bSay(tg.name+'的'+stat+'已經不會再變了！'); }
+    else{ tg[key]=btClamp(tg[key]+m.eff.d,-6,6); bSay(tg.name+'的'+stat+(m.eff.d<0?'下降了！':'提高了！')); }
+  }
+}
+function btFoeAct(){
+  var me=BT.me, foe=BT.foe;
+  if(foe.hp<=0||me.hp<=0)return;
+  var ms=foe.moves.filter(function(m){return m.left>0;});
+  if(!ms.length)ms=foe.moves;
+  var m=ms[Math.floor(Math.random()*ms.length)]; m.left=Math.max(0,m.left-1);
+  btUse(foe,me,m);
+}
+function btFinishTurn(){
+  var me=BT.me, foe=BT.foe, n=BT.npc;
+  if(foe.hp<=0){
+    BT.result='win';
+    bSay('你打贏了'+foe.name+'！',true);
+    bSay(foe.name+'：「'+n.win+'」',true);
+    bSay('你拿到了 1 張「準時下班券」！',true);
+    bq({t:'end'});
+  }else if(me.hp<=0){
+    BT.result='lose';
+    bSay('你眼前一黑……',true);
+    bSay(foe.name+'：「'+n.lose+'」',true);
+    bq({t:'end'});
+  }
+  btRun();
+}
+// act：招式物件，或 'bag' / 'crew' / 'run'
+function btTurn(act){
+  var me=BT.me, foe=BT.foe;
+  if(act==='run'){ bSay('不行！不能從對戰中逃走！',true); btRun(); return; }
+  if(act==='bag'){
+    if(!BT.buns){ bSay('背包裡什麼都沒有了。',true); btRun(); return; }
+    if(me.hp>=me.max){ bSay('你的 HP 是滿的，胡椒餅先留著。',true); btRun(); return; }
+    BT.buns--;
+    var heal=Math.min(20,me.max-me.hp); me.hp+=heal;
+    bSay('你咬了一口胡椒餅！');
+    bq({t:'hp',who:'me',to:me.hp});
+    bSay('HP 回復了 '+heal+' 點！（還剩 '+BT.buns+' 個）');
+    btFoeAct(); btFinishTurn(); return;
+  }
+  if(act==='crew'){
+    var crew=partyList();
+    if(!crew.length){ bSay('身邊沒有同事。先去約人抽菸吧。',true); btRun(); return; }
+    if(BT.cheered){ bSay('同事們已經喊到沒聲音了。',true); btRun(); return; }
+    BT.cheered=true; me.atkSt=Math.min(6,me.atkSt+1);
+    bSay(crew[0].n+(crew.length>1?' 和其他 '+(crew.length-1)+' 個同事':'')+'在旁邊大喊：「上啊！」');
+    bSay('你的攻擊提高了！');
+    btFoeAct(); btFinishTurn(); return;
+  }
+  var m=act;
+  if(m.left<=0){ bSay('「'+m.n+'」已經沒有 PP 了！',true); btRun(); return; }
+  m.left--;
+  if(me.spd>=foe.spd){ btUse(me,foe,m); btFoeAct(); }
+  else{ btFoeAct(); btUse(me,foe,m); }
+  btFinishTurn();
+}
+
+/* ---- 輸入 ---- */
+var BT_MENU=['戰鬥','道具','同事','逃跑'];
+function btMenuPick(i){
+  BT.cursor=i; SND.blip(990,0.06);
+  if(i===0){ BT.phase='moves'; }
+  else btTurn(i===1?'bag':i===2?'crew':'run');
+}
+function btMovePick(i){ BT.mcursor=i; SND.blip(990,0.06); btTurn(BT.me.moves[i]); }
+function btConfirm(){
+  if(BT.phase==='talk'){
+    if(BT.shown<BT.text.length)BT.shown=BT.text.length; else if(BT.t>0.5)btStartTrans();
+  }else if(BT.phase==='script'){
+    var c=BT.cur;
+    if(c&&c.t==='msg'){
+      if(BT.shown<c.s.length)BT.shown=c.s.length;
+      else{ SND.blip(880,0.04); btNext(); }
+    }
+  }else if(BT.phase==='menu') btMenuPick(BT.cursor);
+  else if(BT.phase==='moves') btMovePick(BT.mcursor);
+}
+function btBack(){ if(BT.phase==='moves'){ BT.phase='menu'; SND.blip(520,0.05); } }
+function btMoveCursor(dx,dy){
+  var key=BT.phase==='menu'?'cursor':BT.phase==='moves'?'mcursor':null;
+  if(!key)return;
+  var i=BT[key], col=i%2, row=i>>1;
+  col=btClamp(col+dx,0,1); row=btClamp(row+dy,0,1);
+  var ni=row*2+col;
+  if(ni!==i){ BT[key]=ni; SND.blip(660,0.04); }
+}
+function battleKey(k,repeat){
+  if(k==='e'||k==='enter'||k===' '){ if(!repeat)btConfirm(); }
+  else if(k==='escape'||k==='x'||k==='backspace'||k==='q'){ if(!repeat)btBack(); }
+  else if(k==='arrowleft'||k==='a')btMoveCursor(-1,0);
+  else if(k==='arrowright'||k==='d')btMoveCursor(1,0);
+  else if(k==='arrowup'||k==='w')btMoveCursor(0,-1);
+  else if(k==='arrowdown'||k==='s')btMoveCursor(0,1);
+}
+cv.parentElement.addEventListener('pointerdown',function(e){
+  if(!BT.on)return;
+  if(e.target.closest&&e.target.closest('button'))return;   // 全螢幕/聲音鈕照常
+  e.preventDefault();
+  var r=cv.getBoundingClientRect();
+  var x=(e.clientX-r.left)*cv.vw/r.width, y=(e.clientY-r.top)*cv.vh/r.height;
+  for(var i=BT.hits.length-1;i>=0;i--){var h=BT.hits[i];
+    if(x>=h.x&&x<=h.x+h.w&&y>=h.y&&y<=h.y+h.h){ h.f(); return; }}
+  btConfirm();
+});
+
+/* ---- 每幀 ---- */
+function btStartTrans(){
+  BT.phase='trans'; BT.t=0; BT.text=''; BT.shown=0;
+  [784,659,523,659,784,1047].forEach(function(f,i){SND.blip(f,0.09,i*0.085);});
+}
+function battleFrame(dt,time){
+  BT.t+=dt; BT.hits=[];
+  var L=btLayout();
+  if(BT.phase==='talk'){
+    if(BT.t>0.35)BT.shown=Math.min(BT.text.length,BT.shown+dt*30);
+    if(BT.shown>=BT.text.length){ BT.doneT=(BT.doneT||0)+dt; if(BT.doneT>1.3)btStartTrans(); }
+    render(0,time);
+    btExclaim();
+    var tb=btTextBox(L,time);
+    btText(BT.text,BT.shown,tb.x+22,tb.y+20,tb.w-56,L.fs);
+    if(BT.shown>=BT.text.length)btArrow(tb.x+tb.w-28,tb.y+tb.h-26,time,L.fs);
+    return;
+  }
+  if(BT.phase==='trans'){
+    render(0,time);
+    btTransition(L,BT.t);
+    if(BT.t>=1.5){ BT.phase='intro'; BT.t=0; }
+    return;
+  }
+  if(BT.phase==='intro'){
+    var p=BT.t/1.1;
+    drawBattle(L,time,btEase(p));
+    ctx.fillStyle='rgba(0,0,0,'+btClamp(1-p*2.5,0,1)+')'; ctx.fillRect(0,0,L.W,L.H);
+    if(p>=1){
+      BT.boxT=0;
+      bSay(BT.foe.name+'想要和你對戰！',true);
+      btRun();
+    }
+    return;
+  }
+  if(BT.phase==='out'){
+    if(BT.t<0.5){ drawBattle(L,time,1); ctx.fillStyle='rgba(0,0,0,'+(BT.t*2)+')'; ctx.fillRect(0,0,L.W,L.H); }
+    else{
+      if(!BT.finished)btFinish();
+      render(0,time);
+      ctx.fillStyle='rgba(0,0,0,'+btClamp((1-BT.t)*2,0,1)+')'; ctx.fillRect(0,0,L.W,L.H);
+      if(BT.t>=1){ BT.on=false; }
+    }
+    return;
+  }
+  // script / menu / moves
+  BT.boxT=Math.min(1,BT.boxT+dt*2.4);
+  if(BT.phase==='script')btUpdateScript(dt);
+  drawBattle(L,time,1);
+}
+function btUpdateScript(dt){
+  var c=BT.cur; if(!c)return;
+  BT.ct+=dt;
+  if(c.t==='msg'){
+    BT.shown=Math.min(c.s.length,BT.shown+dt*40);
+    if(!c.manual&&BT.shown>=c.s.length&&BT.ct>c.s.length/40+0.85)btNext();
+  }else if(c.t==='atk'){ if(BT.ct>=0.8)btNext(); }
+  else if(c.t==='hit'){ if(BT.ct>=0.5)btNext(); }
+  else if(c.t==='hp'){
+    var f=BT[c.who], sp=f.max/1.1*dt;
+    f.shown = f.shown>c.to ? Math.max(c.to,f.shown-sp) : Math.min(c.to,f.shown+sp);
+    if(f.shown===c.to&&BT.ct>0.2)btNext();
+  }else if(c.t==='faint'){
+    var g=BT[c.who]; g.fp=Math.min(1,BT.ct/0.6);
+    if(BT.ct>=0.8)btNext();
+  }
+}
+function btFinish(){
+  BT.finished=true;
+  document.body.classList.remove('in-battle');
+  var n=BT.npc, win=BT.result==='win';
+  say(n,win?n.win:n.lose,4);
+  if(win){ state.btWins=(state.btWins||0)+1; }
+  showCard('路人對戰',n.n,win?('你贏了 · 第 '+state.btWins+' 勝 · '+areaName()):('你輸了 · '+areaName()),
+    win?'他把筆電闔上，嘆了一口氣，往捷運站走回去。':'你點了點頭。今天大概又要很晚才能走了。');
+  addLog((win?'在'+areaName()+'打贏了'+n.n:'在'+areaName()+'輸給了'+n.n)+'（'+clockStr()+'）');
+  switchTab('now'); save();
+  setTimeout(function(){toast(win?('打贏了'+n.n+'！'):('輸給了'+n.n+'……'));},500);
+}
+
+/* ---- 畫面 ---- */
+function btLayout(){
+  var W=cv.vw, H=cv.vh, st=safeIn.t, sb=safeIn.b;
+  var boxH=Math.round(btClamp(H*0.26,104,176))+sb;
+  var aH=H-boxH;
+  var s=btClamp((aH-st)/120,2.1,4.4);
+  return {W:W,H:H,st:st,sb:sb,boxH:boxH,aH:aH,s:s,
+    ex:W*0.71, ey:st+(aH-st)*0.47,           // 對手站位（右上）
+    px:W*0.27, py:aH-8,                      // 自己站位（左下，背對鏡頭、比較大）
+    fs:Math.round(btClamp((boxH-sb)*0.16,15,21))};
+}
+function btWrap(s,maxW){
+  var out=[], line='';
+  for(var i=0;i<s.length;i++){
+    var ch=s[i];
+    if(ctx.measureText(line+ch).width>maxW&&line){ out.push(line); line=ch; }
+    else line+=ch;
+  }
+  if(line)out.push(line);
+  return out;
+}
+function btTextBox(L,time){
+  var x=8, y=L.aH+4, w=L.W-16, h=L.boxH-12-L.sb;
+  ctx.fillStyle='#2f3d4c'; rrect(ctx,x,y,w,h,10); ctx.fill();
+  ctx.fillStyle='#fbfaf3'; rrect(ctx,x+5,y+5,w-10,h-10,7); ctx.fill();
+  ctx.strokeStyle='#c96f4a'; ctx.lineWidth=2; rrect(ctx,x+9,y+9,w-18,h-18,5); ctx.stroke();
+  return {x:x,y:y,w:w,h:h};
+}
+// 打字機文字；n 是目前顯示到第幾個字
+function btText(s,n,x,y,maxW,fs){
+  ctx.font='500 '+fs+'px '+BT_FONT; ctx.textAlign='left'; ctx.textBaseline='top';
+  var lines=btWrap(s,maxW), left=Math.floor(n), lh=fs*1.5;
+  for(var i=0;i<lines.length&&left>0;i++){
+    var part=lines[i].slice(0,left); left-=lines[i].length;
+    ctx.fillStyle='#d4d0c4'; ctx.fillText(part,x+1.5,y+i*lh+1.5);   // 寶可夢那種淡灰陰影
+    ctx.fillStyle='#2b3138'; ctx.fillText(part,x,y+i*lh);
+  }
+  ctx.textBaseline='alphabetic';
+  return lines.length*lh;
+}
+function btArrow(x,y,time,fs){       // 文字講完、等你按的閃爍 ▼
+  if(Math.floor(time*2.5)%2)return;
+  ctx.fillStyle='#c96f4a'; ctx.beginPath();
+  ctx.moveTo(x-fs*0.4,y); ctx.lineTo(x+fs*0.4,y); ctx.lineTo(x,y+fs*0.45); ctx.closePath(); ctx.fill();
+}
+function btExclaim(){              // 路人頭上的「！」
+  var n=BT.npc, p=btClamp(BT.t/0.25,0,1);
+  var x=n.x*TS-render.ox, y=n.y*TS-render.oy-58;
+  var sc=p<1?0.4+p*0.9:1+Math.sin(Math.min(1,(BT.t-0.25)/0.2)*Math.PI)*0.25;
+  ctx.save(); ctx.translate(x,y); ctx.scale(sc,sc);
+  ctx.fillStyle='#fffdf4'; ctx.strokeStyle='#2b3138'; ctx.lineWidth=2;
+  rrect(ctx,-10,-14,20,26,6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#d23c32'; ctx.fillRect(-2.5,-9,5,11); ctx.fillRect(-2.5,5,5,4.5);
+  ctx.restore();
+}
+function btTransition(L,t){
+  var W=L.W,H=L.H;
+  if(t<0.55){                          // 閃屏三下（偏好減少動態就不閃）
+    if(!reduce){ var a=Math.abs(Math.sin(t/0.55*Math.PI*3))*0.85; ctx.fillStyle='rgba(0,0,0,'+a+')'; ctx.fillRect(0,0,W,H); }
+    return;
+  }
+  var p=(t-0.55)/0.8, N=8, bh=Math.ceil(H/N);
+  ctx.fillStyle='#000';
+  for(var i=0;i<N;i++){                 // 黑條左右交錯掃進來
+    var pi=btEase(p*1.5-i*0.06), bw=W*pi;
+    if(i%2)ctx.fillRect(W-bw,i*bh,bw,bh+1); else ctx.fillRect(0,i*bh,bw,bh+1);
+  }
+}
+function btPlatform(x,y,rx){
+  ctx.fillStyle='#9fc271'; ctx.beginPath(); ctx.ellipse(x,y,rx,rx*0.27,0,0,6.283); ctx.fill();
+  ctx.fillStyle='#b8d98c'; ctx.beginPath(); ctx.ellipse(x,y-rx*0.04,rx*0.88,rx*0.2,0,0,6.283); ctx.fill();
+}
+function btSprite(f,x,y,s,face,time){
+  var c=BT.cur, ox=0, oy=0, alpha=1;
+  if(BT.phase==='script'&&c){
+    if(c.t==='atk'&&c.who===f.side){                       // 出招前衝
+      var lp=Math.sin(btClamp(BT.ct/0.4,0,1)*Math.PI)*(c.fx==='dash'?26:14)*s/3;
+      ox=f.side==='me'?lp:-lp; oy=f.side==='me'?-lp*0.5:lp*0.5;
+    }
+    if(c.t==='hit'&&c.who===f.side&&Math.floor(BT.ct*14)%2)return;   // 受擊閃爍
+  }
+  if(f.fp>0){ oy+=f.fp*16*s; alpha=1-f.fp; if(alpha<=0)return; }
+  ctx.save(); ctx.globalAlpha=alpha;
+  if(f.fp>0){ ctx.beginPath(); ctx.rect(x-40*s,y-60*s,80*s,60*s+2); ctx.clip(); }   // 往下沉進台子
+  ctx.translate(x+ox,y+oy); ctx.scale(s,s);
+  var bob=Math.sin(time*2.2+(f.side==='me'?1:0))*0.6;
+  // 地圖上的小人沒有腿，放大後會像浮在影子上，對戰時補兩條腿
+  ctx.fillStyle='#3a3f48'; rrect(ctx,-5,-7,4,7,1.5); ctx.fill(); rrect(ctx,1,-7,4,7,1.5); ctx.fill();
+  drawPerson(0,-1.5,f.c,f.c2,face,bob,null);
+  ctx.restore();
+}
+function btFx(fx,x,y,p,s){              // 招式特效，畫在被打的人身上
+  var a=1-p; ctx.save();
+  if(fx==='hit'||fx==='dash'){
+    ctx.strokeStyle='rgba(255,214,90,'+a+')'; ctx.lineWidth=3;
+    for(var i=0;i<8;i++){var an=i/8*6.283+0.3, r0=6*s*p, r1=r0+7*s;
+      ctx.beginPath(); ctx.moveTo(x+Math.cos(an)*r0,y+Math.sin(an)*r0); ctx.lineTo(x+Math.cos(an)*r1,y+Math.sin(an)*r1); ctx.stroke();}
+    ctx.fillStyle='rgba(255,250,220,'+a+')'; ctx.beginPath(); ctx.arc(x,y,4*s*(1-p*0.5),0,6.283); ctx.fill();
+  }else if(fx==='fire'){
+    for(var j=0;j<7;j++){var fx2=x+Math.sin(j*2.1+p*9)*7*s, fy=y+6*s-p*16*s-j*2*s;
+      ctx.fillStyle='rgba('+(240-j*6)+','+(110+j*14)+',40,'+a+')'; ctx.beginPath(); ctx.arc(fx2,fy,(5-j*0.4)*s*(1-p*0.4),0,6.283); ctx.fill();}
+  }else if(fx==='ghost'){
+    ctx.strokeStyle='rgba(120,80,170,'+a+')'; ctx.lineWidth=2.5;
+    for(var g=0;g<3;g++){ctx.beginPath(); ctx.arc(x,y,(4+g*5+p*8)*s,0,6.283); ctx.stroke();}
+    ctx.fillStyle='rgba(60,40,90,'+a+')'; ctx.font='700 '+Math.round(5*s)+'px '+BT_FONT; ctx.textAlign='center';
+    ctx.fillText('已讀',x,y-12*s-p*6*s);
+  }else if(fx==='psy'){
+    ctx.strokeStyle='rgba(230,90,170,'+a+')'; ctx.lineWidth=3;
+    for(var k=0;k<4;k++){var rr=((p*1.6+k*0.25)%1)*20*s; ctx.beginPath(); ctx.ellipse(x,y,rr,rr*0.6,0,0,6.283); ctx.stroke();}
+  }else if(fx==='meeting'){
+    ctx.font='700 '+Math.round(4.2*s)+'px '+BT_FONT; ctx.textAlign='center';
+    for(var q=0;q<3;q++){var bx=x+(q-1)*12*s, by=y-10*s-p*8*s-q*3*s;
+      ctx.fillStyle='rgba(250,250,245,'+a+')'; rrect(ctx,bx-8*s,by-5*s,16*s,8*s,2*s); ctx.fill();
+      ctx.fillStyle='rgba(70,80,90,'+a+')'; ctx.fillText(['開會','同步','對齊'][q],bx,by+1.2*s);}
+  }else if(fx==='dark'){
+    ctx.fillStyle='rgba(40,30,50,'+a*0.8+')';
+    for(var d=0;d<6;d++){var an2=d/6*6.283+p*2, r2=(4+p*10)*s;
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+Math.cos(an2-0.18)*r2,y+Math.sin(an2-0.18)*r2); ctx.lineTo(x+Math.cos(an2+0.18)*r2,y+Math.sin(an2+0.18)*r2); ctx.fill();}
+  }
+  ctx.restore();
+}
+function btHpBox(f,x,y,w,showNum){
+  var fs=Math.round(btClamp(w/14,13,17)), h=showNum?fs*4.1:fs*3.2;
+  ctx.fillStyle='rgba(30,40,34,.25)'; rrect(ctx,x+3,y+4,w,h,9); ctx.fill();
+  ctx.fillStyle='#f8f6e8'; rrect(ctx,x,y,w,h,9); ctx.fill();
+  ctx.strokeStyle='#3c4a3e'; ctx.lineWidth=2.5; rrect(ctx,x,y,w,h,9); ctx.stroke();
+  ctx.textBaseline='alphabetic';
+  ctx.fillStyle='#2b3138'; ctx.font='700 '+fs+'px '+BT_FONT; ctx.textAlign='left';
+  var nm=f.name; while(ctx.measureText(nm).width>w-fs*4.4&&nm.length>2)nm=nm.slice(0,-1);
+  ctx.fillText(nm+(nm!==f.name?'…':''),x+12,y+fs*1.35);
+  ctx.font='500 '+(fs-1)+'px '+BT_FONT; ctx.textAlign='right'; ctx.fillText('Lv'+f.lv,x+w-12,y+fs*1.35);
+  var bx=x+12+fs*1.9, by=y+fs*1.85, bw=w-24-fs*1.9, bh=Math.max(6,fs*0.48);
+  ctx.fillStyle='#d9862f'; rrect(ctx,x+12,by-2,fs*1.7,bh+4,3); ctx.fill();
+  ctx.fillStyle='#fff6e0'; ctx.font='700 '+Math.round(fs*0.62)+'px '+BT_FONT; ctx.textAlign='center';
+  ctx.fillText('HP',x+12+fs*0.85,by+bh*0.95);
+  ctx.fillStyle='#3a4a40'; rrect(ctx,bx,by-2,bw,bh+4,3); ctx.fill();
+  var ratio=btClamp(f.shown/f.max,0,1);
+  ctx.fillStyle=ratio>0.5?'#46c25f':ratio>0.2?'#e9be35':'#e2493a';
+  if(ratio>0){ rrect(ctx,bx+2,by,Math.max(2,(bw-4)*ratio),bh,2); ctx.fill(); }
+  if(showNum){
+    ctx.fillStyle='#2b3138'; ctx.font='500 '+fs+'px "DM Mono",ui-monospace,monospace'; ctx.textAlign='right';
+    ctx.fillText(Math.ceil(f.shown)+' / '+f.max,x+w-12,y+h-fs*0.55);
+  }
+  ctx.textAlign='left';
+}
+function drawBattle(L,time,slide){
+  var W=L.W, H=L.H, s=L.s, ps=s*1.3, me=BT.me, foe=BT.foe;
+  // 背景：天空 → 草地
+  var g=ctx.createLinearGradient(0,0,0,L.aH);
+  g.addColorStop(0,'#d7ecf1'); g.addColorStop(0.42,'#eef5dc'); g.addColorStop(1,'#d3e9ad');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,L.aH);
+  ctx.strokeStyle='rgba(120,160,90,.18)'; ctx.lineWidth=1;
+  for(var y=L.aH*0.5;y<L.aH;y+=14){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  // 開場：對手從左邊滑到右上、自己從右邊滑到左下
+  var ex=-W*0.3+(L.ex+W*0.3)*slide, px=W*1.3-(W*1.3-L.px)*slide;
+  btPlatform(ex,L.ey,30*s);
+  btPlatform(px,L.py,30*ps);
+  btSprite(foe,ex,L.ey,s,'down',time);
+  btSprite(me,px,L.py,ps,'up',time);
+  // 招式特效
+  var c=BT.cur;
+  if(BT.phase==='script'&&c&&c.t==='atk'&&BT.ct>0.3){
+    var tgt=c.who==='me'?{x:L.ex,y:L.ey-16*s,s:s}:{x:L.px,y:L.py-16*ps,s:ps};
+    btFx(c.fx,tgt.x,tgt.y,btClamp((BT.ct-0.3)/0.5,0,1),tgt.s);
+  }
+  // 血條框：開場後才滑進來
+  if(BT.phase!=='intro'){
+    var bw=Math.round(btClamp(W*0.46,170,260)), e=btEase(BT.boxT);
+    btHpBox(foe, 12-(1-e)*(bw+20), L.st+12, bw, false);
+    var pfs=Math.round(btClamp(bw/14,13,17));
+    btHpBox(me, W-bw-12+(1-e)*(bw+20), L.aH-pfs*4.1-12, bw, true);
+  }
+  // 底部文字框 + 選單
+  var b=btTextBox(L,time), fs=L.fs;
+  if(BT.phase==='menu'){
+    var pw=Math.round(Math.min(b.w*0.54,320));
+    btText(BT.text,BT.text.length,b.x+22,b.y+20,b.w-pw-36,fs);
+    btGrid(b.x+b.w-pw,b.y,pw,b.h,BT_MENU,BT.cursor,btMenuPick,fs,null);
+  }else if(BT.phase==='moves'){
+    var lw=Math.round(b.w*(b.w<520?0.72:0.66));
+    btGrid(b.x,b.y,lw,b.h,me.moves.map(function(m){return m.n;}),BT.mcursor,btMovePick,fs,
+      function(i){return me.moves[i].left<=0;});
+    // 右邊：PP、屬性、返回
+    var rx=b.x+lw, rw=b.w-lw, mv=me.moves[BT.mcursor];
+    ctx.fillStyle='#2f3d4c'; rrect(ctx,rx,b.y,rw,b.h,10); ctx.fill();
+    ctx.fillStyle='#fbfaf3'; rrect(ctx,rx+5,b.y+5,rw-10,b.h-10,7); ctx.fill();
+    var sfs=Math.max(13,fs-3);
+    ctx.font='500 '+sfs+'px '+BT_FONT; ctx.textAlign='left'; ctx.fillStyle='#2b3138'; ctx.textBaseline='top';
+    ctx.fillText('PP  '+mv.left+'/'+mv.pp,rx+16,b.y+16);
+    ctx.fillText('屬性／'+mv.type,rx+16,b.y+16+sfs*1.5);
+    var bkH=sfs*1.9, bkY=b.y+b.h-bkH-12, bkX=rx+12, bkW=rw-24;
+    ctx.fillStyle='#e7e2d2'; rrect(ctx,bkX,bkY,bkW,bkH,6); ctx.fill();
+    ctx.fillStyle='#5a4a3a'; ctx.textAlign='center'; ctx.fillText('返回',bkX+bkW/2,bkY+(bkH-sfs)/2);
+    ctx.textBaseline='alphabetic'; ctx.textAlign='left';
+    BT.hits.push({x:bkX,y:bkY,w:bkW,h:bkH,f:btBack});
+  }else{
+    btText(BT.text,BT.shown,b.x+22,b.y+20,b.w-56,fs);
+    if(BT.phase==='script'&&c&&c.t==='msg'&&c.manual&&BT.shown>=c.s.length)
+      btArrow(b.x+b.w-28,b.y+b.h-26,time,fs);
+  }
+}
+// 2×2 選單格子：寶可夢那種「▶ 戰鬥」
+function btGrid(x,y,w,h,items,cur,pick,fs,disabled){
+  ctx.fillStyle='#2f3d4c'; rrect(ctx,x,y,w,h,10); ctx.fill();
+  ctx.fillStyle='#fbfaf3'; rrect(ctx,x+5,y+5,w-10,h-10,7); ctx.fill();
+  var ix=x+10, iy=y+10, cw=(w-20)/2, ch=(h-20)/2;
+  // 最長的選項放不下就縮字級（手機直立時「胡椒餅燙嘴」才不會被切掉）
+  for(;fs>12;fs--){
+    ctx.font='700 '+fs+'px '+BT_FONT;
+    var widest=Math.max.apply(null,items.map(function(t){return ctx.measureText(t).width;}));
+    if(widest<=cw-fs*1.6-8)break;
+  }
+  ctx.font='700 '+fs+'px '+BT_FONT; ctx.textBaseline='middle'; ctx.textAlign='left';
+  items.forEach(function(t,i){
+    var cx=ix+(i%2)*cw, cy=iy+(i>>1)*ch;
+    if(i===cur){ ctx.fillStyle='rgba(201,111,74,.13)'; rrect(ctx,cx+2,cy+2,cw-4,ch-4,6); ctx.fill();
+      ctx.fillStyle='#c96f4a'; ctx.beginPath(); ctx.moveTo(cx+10,cy+ch/2-fs*0.36); ctx.lineTo(cx+10+fs*0.5,cy+ch/2); ctx.lineTo(cx+10,cy+ch/2+fs*0.36); ctx.closePath(); ctx.fill(); }
+    ctx.fillStyle=disabled&&disabled(i)?'#a9a59a':'#2b3138';
+    var label=t; while(ctx.measureText(label).width>cw-fs*1.6-8&&label.length>1)label=label.slice(0,-1);
+    ctx.fillText(label,cx+fs*1.3+6,cy+ch/2);
+    BT.hits.push({x:cx,y:cy,w:cw,h:ch,f:(function(k){return function(){
+      if(BT.phase==='menu'||BT.phase==='moves')pick(k);};})(i)});
+  });
+  ctx.textBaseline='alphabetic';
 }
 
 /* ============ 小地圖 ============ */
@@ -1434,6 +1974,13 @@ function areaName(){
 /* ============ 輸入 ============ */
 window.addEventListener('keydown',function(e){
   var k=e.key.toLowerCase();
+  if(BT.on){                                   // 對戰中鍵盤全部交給對戰選單（M/F 照常）
+    e.preventDefault();
+    if(k==='m')toggleAudio();
+    else if(k==='f')toggleFullscreen();
+    else battleKey(k,e.repeat);
+    return;
+  }
   if(['arrowup','arrowdown','arrowleft','arrowright',' '].indexOf(k)>=0)e.preventDefault();
   keys[k]=1;
   if(k==='e'||k==='enter'||k===' ')interact();
@@ -1794,6 +2341,7 @@ function step(dt){
 var hudTick=0, saveTick=0;
 function loop(t){
   var dt=Math.min(0.05,(t-lastT)/1000||0); lastT=t;
+  if(BT.on){ battleFrame(dt,t/1000); requestAnimationFrame(loop); return; }  // 對戰中地圖凍結
   step(dt);
   render(dt,t/1000);
 

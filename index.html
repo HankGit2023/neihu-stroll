@@ -1676,7 +1676,7 @@ function battleFrame(dt,time){
   var L=btLayout();
   if(BT.phase==='talk'){
     if(BT.t>0.35)BT.shown=Math.min(BT.text.length,BT.shown+dt*30);
-    if(BT.shown>=BT.text.length){ BT.doneT=(BT.doneT||0)+dt; if(BT.doneT>1.3)btStartTrans(); }
+    // 文字講完就停在這裡，等玩家點一下（或按 E）才進戰鬥，不自動跳
     render(0,time);
     btExclaim();
     var tb=btTextBox(L,time);

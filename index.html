@@ -80,8 +80,7 @@ body.focus-mode .foot{display:none}
 body.focus-mode .viewport{
   position:fixed;
   inset:0;
-  width:100vw; width:100dvw;
-  height:100vh; height:100dvh;
+  width:auto; height:auto;   /* 只靠 inset:0 貼齊四邊；100vh/100dvh 在 iOS 主畫面模式會跟實際可視高度對不上 */
   overflow:hidden;
   border:0; border-radius:0;
   background:#000;
@@ -366,6 +365,13 @@ var SND=(function(){
   // C 大調琶音，輕快感
   var SCALE=[523.25,659.25,783.99,659.25,880.00,783.99,659.25,523.25]; // C5 E5 G5 E5 A5 G5 E5 C5
   var STEP_MS=180; // ~ 83 BPM 的八分音
+  // 戰鬥曲：A 小調、快板，方波主旋律 + 三角波 bass，寶可夢那種催促感
+  var BTL_MEL=[659.25,0,659.25,587.33, 659.25,0,783.99,659.25, 587.33,0,523.25,587.33, 493.88,0,440.00,493.88,
+               523.25,0,523.25,493.88, 523.25,0,659.25,587.33, 523.25,0,493.88,440.00, 415.30,0,493.88,0];
+  var BTL_BASS=[110,0,220,110, 110,0,220,110, 98,0,196,98, 123.47,0,246.94,123.47,
+                87.31,0,174.61,87.31, 87.31,0,174.61,87.31, 82.41,0,164.81,82.41, 82.41,164.81,82.41,164.81];
+  var BTL_STEP_MS=125;   // ~120 BPM 的十六分音
+  var mode='field';      // field 散步曲｜battle 戰鬥曲｜none 安靜（播勝負小段時）
   function ensureCtx(){
     if(ac)return ac;
     try{
@@ -377,10 +383,10 @@ var SND=(function(){
     }catch(e){ac=null;}
     return ac;
   }
-  function playNote(freq,dur,when,gain){
+  function playNote(freq,dur,when,gain,type){
     if(!ac)return;
     var o=ac.createOscillator(), g=ac.createGain();
-    o.type='triangle'; o.frequency.value=freq;
+    o.type=type||'triangle'; o.frequency.value=freq;
     var t0=when||ac.currentTime, d=dur||0.22;
     g.gain.setValueAtTime(0,t0);
     g.gain.linearRampToValueAtTime(gain||0.05,t0+0.012);
@@ -391,6 +397,13 @@ var SND=(function(){
   function tickBGM(){
     if(!enabled||!ac)return;
     var now=ac.currentTime;
+    if(mode==='battle'){
+      var i=bgmStep%BTL_MEL.length;
+      if(BTL_MEL[i])playNote(BTL_MEL[i],0.12,now,0.032,'square');
+      if(BTL_BASS[i])playNote(BTL_BASS[i],0.13,now,0.07,'triangle');
+      if(i%4===0)playNote(BTL_MEL[i]?BTL_MEL[i]*0.5:220,0.05,now,0.02,'square');  // 拍點加一點厚度
+      bgmStep++; return;
+    }
     // 主旋律
     playNote(SCALE[bgmStep%SCALE.length],0.22,now,0.055);
     // 低八度 bass（每兩步一次）
@@ -400,11 +413,11 @@ var SND=(function(){
     bgmStep++;
   }
   function startBGM(){
-    if(!enabled||!ac||bgmTimer)return;
+    if(!enabled||!ac||bgmTimer||mode==='none')return;
     bgmGain.gain.cancelScheduledValues(ac.currentTime);
     bgmGain.gain.setValueAtTime(bgmGain.gain.value,ac.currentTime);
     bgmGain.gain.linearRampToValueAtTime(0.9,ac.currentTime+0.6); // 柔和淡入
-    bgmTimer=setInterval(tickBGM,STEP_MS);
+    bgmTimer=setInterval(tickBGM,mode==='battle'?BTL_STEP_MS:STEP_MS);
   }
   function stopBGM(fade){
     if(!bgmTimer)return;
@@ -450,6 +463,29 @@ var SND=(function(){
     o.connect(g); g.connect(master);
     o.start(t0); o.stop(t0+d+0.02);
   }
+  // 換曲：關聲音時也記住模式，打開聲音就直接是對的那首
+  function setMode(m){
+    if(m===mode)return;
+    mode=m; bgmStep=0;
+    if(bgmTimer){ clearInterval(bgmTimer); bgmTimer=0; }
+    if(enabled&&ac)startBGM();
+  }
+  // 勝負小段：贏了上行號角、輸了下行嘆氣
+  function jingle(win){
+    if(!enabled||!ac)return;
+    var t0=ac.currentTime+0.05;
+    var seq=win?[[523.25,0.12],[659.25,0.12],[783.99,0.12],[1046.5,0.5],[987.77,0.14],[1046.5,0.7]]
+               :[[392,0.3],[349.23,0.3],[311.13,0.3],[261.63,0.9]];
+    seq.forEach(function(n){
+      var o=ac.createOscillator(), g=ac.createGain();
+      o.type='square'; o.frequency.value=n[0];
+      g.gain.setValueAtTime(0.0001,t0);
+      g.gain.exponentialRampToValueAtTime(0.045,t0+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+n[1]);
+      o.connect(g); g.connect(master); o.start(t0); o.stop(t0+n[1]+0.02);
+      t0+=n[1]*(win?0.85:1);
+    });
+  }
   function setEnabled(on){
     enabled=!!on;
     if(enabled){
@@ -471,7 +507,9 @@ var SND=(function(){
     toggle:function(){setEnabled(!enabled);return enabled;},
     setEnabled:setEnabled,
     punch:punch,
-    blip:blip
+    blip:blip,
+    setMode:setMode,
+    jingle:jingle
   };
 })();
 
@@ -954,7 +992,9 @@ function resize(){
     h=Math.round(Math.min(640,Math.max(360,w*0.625)));
   }
   var dpr=Math.min(2,window.devicePixelRatio||1);
-  cv.width=w*dpr; cv.height=h*dpr; cv.style.height=h+'px';
+  cv.width=w*dpr; cv.height=h*dpr;
+  // 全螢幕時高度交給 CSS 的 100%（跟著 viewport 走）；一般模式才寫死
+  cv.style.height=document.body.classList.contains('focus-mode')?'':h+'px';
   ctx.setTransform(dpr,0,0,dpr,0,0);
   cv.vw=w; cv.vh=h;
 }
@@ -1476,6 +1516,7 @@ function startBattle(n){
   document.body.classList.add('in-battle');
   measureSafe();
   SND.blip(1320,0.14,0,'square',0.05);
+  SND.setMode('battle');                         // 被路人盯上那一刻就換戰鬥曲
 }
 
 /* ---- 事件佇列 ---- */
@@ -1489,6 +1530,7 @@ function btNext(){
   if(c.t==='msg'){ BT.text=c.s; BT.shown=0; BT.manual=c.manual; }
   else if(c.t==='atk'){ if(c.pow>0)SND.punch(0.3); else SND.blip(440,0.25,0.3,'sine',0.05); }
   else if(c.t==='end'){ BT.phase='out'; BT.t=0; BT.cur=null; }
+  else if(c.t==='fn'){ c.f(); btNext(); }
 }
 
 /* ---- 招式結算 ---- */
@@ -1531,12 +1573,14 @@ function btFinishTurn(){
   var me=BT.me, foe=BT.foe, n=BT.npc;
   if(foe.hp<=0){
     BT.result='win';
+    bq({t:'fn',f:function(){ SND.setMode('none'); SND.jingle(true); }});
     bSay('你打贏了'+foe.name+'！',true);
     bSay(foe.name+'：「'+n.win+'」',true);
     bSay('你拿到了 1 張「準時下班券」！',true);
     bq({t:'end'});
   }else if(me.hp<=0){
     BT.result='lose';
+    bq({t:'fn',f:function(){ SND.setMode('none'); SND.jingle(false); }});
     bSay('你眼前一黑……',true);
     bSay(foe.name+'：「'+n.lose+'」',true);
     bq({t:'end'});
@@ -1691,6 +1735,7 @@ function btUpdateScript(dt){
 }
 function btFinish(){
   BT.finished=true;
+  SND.setMode('field');                          // 回地圖換回散步曲
   document.body.classList.remove('in-battle');
   var n=BT.npc, win=BT.result==='win';
   say(n,win?n.win:n.lose,4);
@@ -2341,6 +2386,10 @@ function step(dt){
 var hudTick=0, saveTick=0;
 function loop(t){
   var dt=Math.min(0.05,(t-lastT)/1000||0); lastT=t;
+  if(document.body.classList.contains('focus-mode')){
+    var vr=cv.parentElement.getBoundingClientRect();
+    if(Math.abs(Math.round(vr.height)-cv.vh)>1||Math.abs(Math.max(320,Math.round(vr.width))-cv.vw)>1){ resize(); measureSafe(); }
+  }
   if(BT.on){ battleFrame(dt,t/1000); requestAnimationFrame(loop); return; }  // 對戰中地圖凍結
   step(dt);
   render(dt,t/1000);

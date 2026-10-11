@@ -1466,7 +1466,7 @@ function interact(){
    數值在排進佇列時就算好，畫面上的血條用 shown 慢慢追上實際 hp。 */
 var MOVES_ME=[
   {n:'揮拳',      type:'一般', pow:40, acc:100, pp:35, fx:'hit'},
-  {n:'胡椒餅燙嘴', type:'火',   pow:60, acc:95,  pp:15, fx:'fire'},
+  {n:'你來寫',     type:'火',   pow:60, acc:95,  pp:15, fx:'fire'},
   {n:'已讀不回',   type:'幽靈', pow:0,  acc:100, pp:20, fx:'ghost', eff:{who:'target',stat:'atk',d:-1}},
   {n:'衝刺撞擊',   type:'一般', pow:80, acc:85,  pp:10, fx:'dash', recoil:0.25}
 ];
@@ -1953,7 +1953,7 @@ function btGrid(x,y,w,h,items,cur,pick,fs,disabled){
   ctx.fillStyle='#2f3d4c'; rrect(ctx,x,y,w,h,10); ctx.fill();
   ctx.fillStyle='#fbfaf3'; rrect(ctx,x+5,y+5,w-10,h-10,7); ctx.fill();
   var ix=x+10, iy=y+10, cw=(w-20)/2, ch=(h-20)/2;
-  // 最長的選項放不下就縮字級（手機直立時「胡椒餅燙嘴」才不會被切掉）
+  // 最長的選項放不下就縮字級（手機直立時長招式名才不會被切掉）
   for(;fs>12;fs--){
     ctx.font='700 '+fs+'px '+BT_FONT;
     var widest=Math.max.apply(null,items.map(function(t){return ctx.measureText(t).width;}));

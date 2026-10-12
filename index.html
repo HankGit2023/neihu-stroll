@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="在台北市內湖區自由走動的散步遊戲：走訪 17 個真實地景、收集 30 件在地圖鑑，順便揍馬哥。">
+<meta name="description" content="在台北市內湖區自由走動的散步遊戲：走訪 17 個真實地景、收集 30 件在地圖鑑。">
 <!-- iOS 加入主畫面後以 standalone 開啟，瀏覽器網址列不會出現 -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -113,6 +113,24 @@ body.in-battle .minimap,
 body.in-battle .hint,
 body.in-battle .toast{display:none!important}
 body.in-battle #game{cursor:pointer}
+/* 撥號中也把搖桿、行動鈕、提示收起來 */
+body.in-dial .pad, body.in-dial #stickzone, body.in-dial #stick, body.in-dial .hint{display:none!important}
+/* 老電話亭的撥號盤 */
+.dial{position:absolute;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(10,16,14,.55)}
+.dial.on{display:flex}
+.dial-box{width:min(280px,86%);background:#1f2a2b;color:#e8f0ea;border:2px solid #3d5557;border-radius:14px;padding:14px 16px 16px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.dial-head{display:flex;justify-content:space-between;align-items:center;font-size:13px;letter-spacing:.12em;color:#9fb8b3;margin-bottom:8px}
+.dial-close{background:none;border:0;color:#9fb8b3;font-size:20px;line-height:1;cursor:pointer;padding:4px 6px}
+.dial-screen{font-family:"DM Mono",ui-monospace,monospace;font-size:28px;letter-spacing:.32em;text-align:center;
+  background:#0e1515;color:#7fe0b8;border-radius:6px;padding:8px 10px;min-height:54px;margin-bottom:12px;white-space:nowrap;overflow:hidden}
+.dial-screen.bad{color:#e1705a;animation:dialshake .36s}
+@keyframes dialshake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+.dial-keys{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.dial-keys button{height:52px;border-radius:10px;border:1px solid #3d5557;background:#2b3a3b;color:#e8f0ea;
+  font-size:20px;font-weight:700;cursor:pointer;touch-action:manipulation}
+.dial-keys button:active{background:#3d5557}
+.dial-keys .call{background:#2e7d6b;font-size:16px}
+.dial-keys .clr{font-size:16px;color:#c6ccc4}
 /* 黃色 toast 不要被動態島吃掉 */
 body.focus-mode .toast{top:calc(14px + env(safe-area-inset-top))}
 /* 虛擬搖桿 / 動作鈕區避開 home indicator 和側邊 notch */
@@ -289,6 +307,18 @@ body.focus-mode .pad{
       <button class="hud-btn audio-btn" id="audio-btn" type="button" aria-pressed="false" aria-label="聲音開關" title="聲音關（按 M 開啟）">🔇</button>
       <div class="hint" id="hint"></div>
       <div class="toast" id="toast"></div>
+      <div class="dial" id="dial" role="dialog" aria-label="老電話亭">
+        <div class="dial-box">
+          <div class="dial-head"><span>老電話亭 · 請撥號</span><button class="dial-close" id="dial-close" type="button" aria-label="掛上">✕</button></div>
+          <div class="dial-screen" id="dial-screen"></div>
+          <div class="dial-keys" id="dial-keys">
+            <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
+            <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button>
+            <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
+            <button type="button" data-k="clr" class="clr">清除</button><button type="button" data-k="0">0</button><button type="button" data-k="call" class="call">撥出</button>
+          </div>
+        </div>
+      </div>
       <div id="stickzone"></div>
       <div id="stick"><div id="stick-base"><div id="stick-knob"></div></div></div>
       <div class="pad">
@@ -333,10 +363,9 @@ body.focus-mode .pad{
           <li><kbd>1 2 3</kbd><span>切換右邊的分頁</span></li>
           <li><kbd>M / F</kbd><span>聲音開關 / 全螢幕切換</span></li>
         </ul>
-        <p class="note">地圖上某處有個穿水藍色風衣、下巴有點厚的傢伙，叫馬哥，頭上永遠掛著一句「那個前端真的很屌..」。他會自己換地方，小地圖上的橘點就是他。走到他旁邊按 <b>E</b> 可以揍下去。</p>
+        <p class="note">聽說基隆河邊有一座沒人在用的老電話亭。撥對號碼的話，會有人出來。</p>
         <p class="note">內科和 737 巷一帶有四個掛著名字的同事——羅素、Kevin、Hank、Vivian。走過去互動，他會問「要一起抽煙嗎？」，再按 <b>E</b>一次就等於回他「走」，然後他會排成一列跟著你。停下來不動，他們會自己點起菸。再互動一次就讓他回去上班。</p>
-    <p class="note">隊伍裡的人只要離馬哥夠近，你揍下去時他們會一起揮拳。</p>
-    <p class="note">洲子街口站著一個<b>趕時程的 PM</b>。跟他說話，他講完一句就會直接開打：回合制對戰，選「戰鬥」再挑一招，誰的 HP 先歸零誰就輸。「道具」是胡椒餅，「同事」要有人跟著你才喊得出來。對戰中用方向鍵選、<b>E</b> 確認、<b>Esc</b> 返回，手機直接點選項。</p>
+    <p class="note">洲子街口站著一個趕時程的 PM，叫 <b>Sid</b>。跟他說話，他講完一句、你點一下就開打：回合制對戰，選「戰鬥」再挑一招，誰的 HP 先歸零誰就輸。「道具」是胡椒餅，「同事」要有人跟著你才喊得出來。對戰中用方向鍵選、<b>E</b> 確認、<b>Esc</b> 返回，手機直接點選項。</p>
     <p class="note">時間會自己走，約十六分鐘一個日夜。天黑後路燈會亮，山上和園區才有東西可以撿。</p>
         <div class="act">
           <button id="btn-rest">休息一下（跳到下個時段）</button>
@@ -721,7 +750,7 @@ var NPCS=[
  {x:60,y:37,c:'#ebe5d7',c2:'#8a5a3b',n:'Hank',join:1,l:['這條巷子我每一攤都吃過。','胡椒餅要趁燙，涼了就不是那回事。','先別急著走，等人少一點。']},
  {x:26,y:58,c:'#f4e3d5',c2:'#a2527c',n:'Vivian',join:1,l:['文件寄給你了，記得收信。','樓下咖啡買一送一，要不要？','今天天氣好到不想回座位。']},
  // 路人對戰：講完 pre 那句就開打（見「路人對戰」區塊）
- {x:48,y:47,c:'#f1e2d0',c2:'#6b4f9a',n:'趕時程的 PM',battle:1,
+ {x:48,y:47,c:'#f1e2d0',c2:'#6b4f9a',n:'Sid',battle:1,
   pre:'你就是說今天能上線的那個人吧？',
   win:'……好啦，時程我再去喬。', lose:'那就這樣說定了，今天上線。',
   l:['先估個時程給我。']}
@@ -735,7 +764,7 @@ var state={
 };
 var KEY='neihu-stroll-v1';
 function save(){
-  try{localStorage.setItem(KEY,JSON.stringify({found:state.found,visited:state.visited,log:state.log.slice(0,30),clock:state.clock,hits:state.hits||0,party:state.party||[],btWins:state.btWins||0}));}catch(e){}
+  try{localStorage.setItem(KEY,JSON.stringify({found:state.found,visited:state.visited,log:state.log.slice(0,30),clock:state.clock,hits:state.hits||0,party:state.party||[],btWins:state.btWins||0,mUnlocked:state.mUnlocked||0}));}catch(e){}
 }
 function load(){
   try{
@@ -747,6 +776,7 @@ function load(){
       if(typeof d.clock==='number')state.clock=d.clock;
       if(typeof d.hits==='number')state.hits=d.hits;
       if(typeof d.btWins==='number')state.btWins=d.btWins;
+      if(d.mUnlocked)state.mUnlocked=1;
       if(Array.isArray(d.party))state.party=d.party;
     }
   }catch(e){}
@@ -771,6 +801,10 @@ function nudge(o){   // 把東西移到最近的可走格
 }
 ITEMS.forEach(function(it){it.x+=0.5;it.y+=0.5;nudge(it);});
 NPCS.forEach(function(n){n.x+=0.5;n.y+=0.5;nudge(n);n.hx=n.x;n.hy=n.y;n.tx=n.x;n.ty=n.y;n.li=0;n.wait=Math.random()*3;});
+// 基隆河畔長椅旁的老電話亭：撥對隱藏碼，馬哥才會出現
+var BOOTH={x:68.5,y:62.5};
+nudge(BOOTH);
+props.push({t:'booth',x:BOOTH.x,y:BOOTH.y});
 load();
 
 /* ============ 同事：跟隨、抽菸、揮拳 ============ */
@@ -865,6 +899,7 @@ function respawnM(){
 }
 
 function stepM(dt){
+  if(!state.mUnlocked){ M.alpha=0; return; }      // 還沒撥對號碼：地圖上沒有這個人
   if(M.leaving){
     M.alpha-=dt*2.4;
     if(M.alpha<=0){M.alpha=0;respawnM();return;}
@@ -1121,6 +1156,15 @@ function drawProp(p,ox,oy,time){
     ctx.fillStyle='#8a5a3b';ctx.fillRect(x-30,y-64,60,4);
     return;
   }
+  if(p.t==='booth'){                                // 老電話亭
+    ctx.fillStyle='rgba(28,40,24,.2)';ctx.fillRect(x-10,y-1,22,6);
+    ctx.fillStyle='#2f5f63';rrect(ctx,x-9,y-40,18,40,2);ctx.fill();
+    ctx.fillStyle='rgba(190,225,222,.55)';ctx.fillRect(x-6,y-33,12,22);
+    ctx.fillStyle='#24494c';ctx.fillRect(x-10,y-43,20,5);
+    ctx.fillStyle='#d9c27a';ctx.fillRect(x-5,y-42,10,3);
+    if(night()>0.25){ctx.fillStyle='rgba(255,226,140,.5)';ctx.fillRect(x-6,y-33,12,22);}
+    return;
+  }
   if(p.t==='bench'){
     ctx.fillStyle='rgba(28,40,24,.15)';ctx.fillRect(x-13,y,28,5);
     ctx.fillStyle='#8a6a44';ctx.fillRect(x-13,y-8,26,6);ctx.fillRect(x-13,y-18,26,5);
@@ -1334,6 +1378,7 @@ function findNearest(){
   for(i=0;i<NPCS.length;i++){var n=NPCS[i];
     // 正在等你回答的人鎖成最高優先，免得「走」按到旁邊的人身上
     cand(n.ask>0?-1:(n.inParty?5:2), n.ask>0?5:(n.inParty?1.3:3.2), 'npc', n, n.x, n.y);}
+  cand(3,2.6,'booth',BOOTH,BOOTH.x,BOOTH.y);
   for(i=0;i<POIS.length;i++){var P=POIS[i];
     cand(4,8,'poi',P,P.x+0.5,P.y+0.5);}
   return best;
@@ -1419,6 +1464,8 @@ function interact(){
     addLog(mob.length? ('在'+areaName()+'和 '+mob.length+' 個同事一起揍了'+M_NAME+'（'+clockStr()+'）')
                      : ('在'+areaName()+'揍了'+M_NAME+'一拳（'+clockStr()+'）'));
     save();
+  }else if(t.k==='booth'){
+    openDial(); return;
   }else if(t.k==='npc'){
     var n=t.o;
     if(n.battle){ startBattle(n); return; }      // 路人對戰
@@ -1973,6 +2020,65 @@ function btGrid(x,y,w,h,items,cur,pick,fs,disabled){
   ctx.textBaseline='alphabetic';
 }
 
+/* ============ 老電話亭：隱藏碼叫出馬哥 ============
+   電話亭在基隆河畔長椅旁。撥 M_CODE 會讓馬哥從電話亭旁邊現身，之後就跟以前一樣到處亂晃。
+   解鎖狀態存檔（mUnlocked），清除進度才會再藏起來。 */
+var M_CODE='9527';
+var dialOpen=false, dialBuf='', dialBusy=false;
+var dialEl=document.getElementById('dial'), dialScreen=document.getElementById('dial-screen');
+function dialShow(){ dialScreen.textContent = dialBuf || '— — — —'; }
+function openDial(){
+  dialOpen=true; dialBuf=''; dialBusy=false; dialScreen.classList.remove('bad'); dialShow();
+  dialEl.classList.add('on'); document.body.classList.add('in-dial');
+  keys={}; joyReset();
+  SND.blip(440,0.25,0,'sine',0.04);                // 拿起話筒的嘟聲
+}
+function closeDial(){
+  dialOpen=false; dialEl.classList.remove('on'); document.body.classList.remove('in-dial');
+}
+function dialPress(d){
+  if(dialBusy||dialBuf.length>=8)return;
+  dialBuf+=d; dialShow();
+  SND.blip(600+(+d)*45,0.09,0,'sine',0.05);        // 按鍵音高跟著數字變
+}
+function dialCall(){
+  if(dialBusy)return;
+  if(dialBuf===M_CODE){ closeDial(); summonM(); return; }
+  dialBusy=true;
+  SND.blip(480,0.35,0,'square',0.03); SND.blip(480,0.35,0.5,'square',0.03);
+  dialScreen.classList.remove('bad'); void dialScreen.offsetWidth; dialScreen.classList.add('bad');
+  dialScreen.textContent = dialBuf ? '空號' : '請先撥號';
+  setTimeout(function(){ dialBusy=false; dialBuf=''; dialScreen.classList.remove('bad'); dialShow(); },1000);
+}
+function dialKey(k){
+  if(k>='0'&&k<='9'&&k.length===1)dialPress(k);
+  else if(k==='backspace'){ if(!dialBusy){ dialBuf=dialBuf.slice(0,-1); dialShow(); } }
+  else if(k==='enter'||k==='e'||k===' ')dialCall();
+  else if(k==='escape'||k==='x'||k==='q')closeDial();
+  else if(k==='m')toggleAudio();
+}
+document.getElementById('dial-keys').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b)return;
+  var k=b.getAttribute('data-k');
+  if(k==='call')dialCall(); else if(k==='clr'){ if(!dialBusy){dialBuf='';dialShow();} } else dialPress(k);
+});
+document.getElementById('dial-close').addEventListener('click',closeDial);
+function summonM(){
+  if(state.mUnlocked&&M.alpha>0.5&&!M.leaving){
+    toast('電話那頭只有嘟嘟聲。'+M_NAME+'已經在外面晃了。'); return;
+  }
+  state.mUnlocked=1;
+  M.x=BOOTH.x+1.3; M.y=BOOTH.y+0.4; nudge(M);       // 從電話亭旁邊走出來
+  M.tx=M.x; M.ty=M.y; M.alpha=0; M.leaving=false; M.wait=3; M.mood=0; M.moodT=0; M.shake=0;
+  M.life=55+Math.random()*45;
+  [523,659,784,1047].forEach(function(f,i){SND.blip(f,0.12,i*0.1,'square',0.04);});
+  toast('電話那頭有人說：「那個前端真的很屌..」');
+  showCard('老電話亭',M_NAME,'有人從電話亭後面走了出來',
+    '穿水藍色風衣、下巴有點厚的傢伙。他會自己換地方，小地圖上的橘點就是他。走到他旁邊按 E 可以揍下去；跟著你的同事離他夠近，也會一起揮拳。');
+  addLog('在'+areaName()+'撥通了一支奇怪的電話（'+clockStr()+'）');
+  switchTab('now'); save();
+}
+
 /* ============ 小地圖 ============ */
 var mmc=document.getElementById('minimap'), mmx=mmc.getContext('2d');
 var mmBase=document.createElement('canvas'); mmBase.width=MW*3; mmBase.height=MH*3;
@@ -2019,6 +2125,7 @@ function areaName(){
 /* ============ 輸入 ============ */
 window.addEventListener('keydown',function(e){
   var k=e.key.toLowerCase();
+  if(dialOpen){ e.preventDefault(); dialKey(k); return; }
   if(BT.on){                                   // 對戰中鍵盤全部交給對戰選單（M/F 照常）
     e.preventDefault();
     if(k==='m')toggleAudio();
@@ -2271,7 +2378,7 @@ document.getElementById('btn-rest').addEventListener('click',function(){
 });
 document.getElementById('btn-reset').addEventListener('click',function(){
   if(!confirm('清除圖鑑與走訪紀錄？'))return;
-  state.found={};state.visited={};state.log=[];state.clock=8*60;state.hits=0;
+  state.found={};state.visited={};state.log=[];state.clock=8*60;state.hits=0;state.mUnlocked=0;M.alpha=0;
   NPCS.forEach(function(n){n.inParty=0;n.ask=0;n.sayT=0;});state.party=[];trail.length=0;
   try{localStorage.removeItem(KEY);}catch(e){}
   renderDex();renderLog();updateHUD();toast('已經重新開始');
@@ -2396,7 +2503,8 @@ function loop(t){
 
   nearest=findNearest();
   if(nearest){
-    var label = nearest.k==='item'?'撿起發亮的東西'
+    var label = nearest.k==='booth'?'拿起老電話亭的話筒'
+      : nearest.k==='item'?'撿起發亮的東西'
       : nearest.k==='M'? ('揍'+M_NAME+'一拳')
       : nearest.k==='npc'? (nearest.o.join
           ? (nearest.o.inParty ? ('讓'+nearest.o.n+'回去上班')
@@ -2407,7 +2515,8 @@ function loop(t){
     hintEl.innerHTML='<kbd>E</kbd>'+label;
     hintEl.classList.add('on');
     // 行動按鈕用短版動詞，塞得進 68px 圓鈕
-    var shortLabel = nearest.k==='item'?'撿'
+    var shortLabel = nearest.k==='booth'?'撥號'
+      : nearest.k==='item'?'撿'
       : nearest.k==='M'? '揍'
       : nearest.k==='npc'? (nearest.o.join
           ? (nearest.o.inParty ? '回去'
